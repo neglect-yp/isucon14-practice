@@ -1,0 +1,22 @@
+{
+  "command": [
+    "task",
+    "run-local",
+    "--",
+    "--payment-bind-port",
+    "12346",
+    "--payment-url",
+    "http://host.docker.internal:12346",
+    "--skip-static-sanity-check",
+    "--fail-on-error"
+  ],
+  "cwd": "bench",
+  "started_at": "2026-10-04T18:14:46.245679+09:00",
+  "commit": "71fa6f1b4d38cb6ce70a5bbaca3ea0a1ed94c3c1",
+  "load_seconds": 60,
+  "static_files_skipped": true,
+  "application_source_diff": "",
+  "finished_at": "2026-10-04T18:15:55.413009+09:00",
+  "elapsed_seconds": 69.122,
+  "exit_code": 0
+}

@@ -31,6 +31,14 @@ tasks:
       - go:build
     cmd: ./isuride{{exeExt}}
     dir: webapp/go
+  rust:build:
+    cmd: docker compose -f compose-local.yml -f compose-rust-local.yml build webapp
+    dir: development
+  rust:run:
+    deps:
+      - rust:build
+    cmd: docker compose -f compose-local.yml -f compose-rust-local.yml up -d
+    dir: development
   perl:run:
     cmd: carton exec plackup -s Starlet -p 8080 -Ilib -r app.psgi
     dir: webapp/perl

@@ -1,0 +1,16 @@
+services:
+  webapp:
+    build:
+      context: ../webapp/rust
+      dockerfile: ../../development/dockerfiles/Dockerfile.rust
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../webapp/sql:/home/isucon/webapp/sql:ro
+    environment:
+      ISUCON_DB_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy
+  matcher:
+    command: /bin/sh -c "while true; do curl -s http://webapp:8080/api/internal/matching; sleep 0.5; done"

@@ -86,7 +86,7 @@ $ ansible-playbook -i inventory/localhost benchmark.yml
 
 `provisioning/ansible/roles/xbuildwebapp/tasks/main.yml`および`provisioning/ansible/roles/webapp/tasks/main.yaml`で必要の無い言語をコメントアウトすることで、ビルド時間を短縮することができます。
 
-## docker compose での環境構築（Go/Perl言語のみ）
+## docker compose での環境構築（Go/Perl/Rust）
 
 作問時に利用した docker compose で環境を構築することもできます。ただし、スペックやTLS証明書の有無など競技環境とは異なります。
 
@@ -97,6 +97,24 @@ $ ansible-playbook -i inventory/localhost benchmark.yml
 $ task up
 $ task go:run
 ```
+
+Rust 実装を利用する場合は、8080 番ポートを使用している `task go:run` を停止してから、リポジトリのルートで実行してください。
+
+```sh
+$ task rust:run
+```
+
+`development/compose-local.yml` に `development/compose-rust-local.yml` を重ねて、Rust アプリケーションをコンテナで release ビルド・起動します。既存の MySQL を利用し、API は `http://localhost:8080` で公開します。マッチング用コンテナも Rust アプリケーションに接続します。
+
+ブラウザ用のフロントエンドは、別ターミナルで起動してください。
+
+```sh
+$ cd frontend
+$ pnpm install
+$ pnpm dev
+```
+
+ブラウザでは `http://localhost:3000` にアクセスできます。
 
 ### 負荷走行の実行
 
@@ -118,6 +136,15 @@ $ go run . run --target http://{{ 対象のIPアドレス }}:{{ 対象のポー�
 
 静的ファイルのチェックに失敗する場合は `--skip-static-sanity-check` オプションを追加して実行することで、チェックをスキップできます。
 （ただし、静的ファイル取得のリクエストもスキップされるため本番での負荷とは厳密には一致しなくなることに注意してください。）
+
+上記の Rust ローカル環境では、API のみを公開しているため静的ファイル取得をスキップし、既存の決済モックと重ならないポートでベンチマーカーを起動します。Colima 上のコンテナからホストに接続する場合の例です。
+
+```sh
+$ cd bench
+$ task run-local -- --payment-bind-port 12346 --payment-url http://host.docker.internal:12346 --skip-static-sanity-check --fail-on-error
+```
+
+ベンチマークはデータベースを初期化します。実行中はブラウザからの操作を控えてください。計測結果は `docs/benchmarks/` に記録します。
 
 ## Links
 

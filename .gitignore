@@ -1,2 +1,7 @@
 _tmp
 webapp/public
+
+# Local task cache and personal tool versions
+/.task/
+mise.local.toml
+.mise.local.toml

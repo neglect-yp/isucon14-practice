@@ -1,0 +1,4 @@
+# Keep summaries, benchmark output, and metadata in Git.
+# Detailed runtime/build logs and generated patches stay local.
+*.log.gz
+setup.patch
