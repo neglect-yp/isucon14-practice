@@ -1,4 +1,6 @@
-# Keep summaries, benchmark output, and metadata in Git.
-# Detailed runtime/build logs and generated patches stay local.
+# Detailed logs and generated metadata are temporary investigation artifacts.
+*.log
 *.log.gz
+attempt-*.json
+environment.json
 setup.patch
