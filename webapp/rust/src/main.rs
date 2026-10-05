@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .await?;
 
-    let app_state = AppState { pool };
+    let app_state = AppState::new(pool);
 
     let app = axum::Router::new()
         .route("/api/initialize", axum::routing::post(post_initialize))
@@ -67,9 +67,14 @@ struct PostInitializeResponse {
 }
 
 async fn post_initialize(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        notifications,
+    }): State<AppState>,
     axum::Json(req): axum::Json<PostInitializeRequest>,
 ) -> Result<axum::Json<PostInitializeResponse>, Error> {
+    // End old streams before replacing the database's notification history.
+    notifications.reset();
     let output = tokio::process::Command::new("../sql/init.sh")
         .output()
         .await?;

@@ -16,6 +16,7 @@ pub fn internal_routes() -> axum::Router<AppState> {
 #[derive(sqlx::FromRow)]
 struct WaitingRide {
     id: String,
+    user_id: String,
     pickup_latitude: i32,
     pickup_longitude: i32,
 }
@@ -53,7 +54,7 @@ fn match_rides(rides: Vec<WaitingRide>, mut chairs: Vec<AvailableChair>) -> Vec<
     assignments
 }
 
-async fn assign_pending_rides(pool: &MySqlPool) -> sqlx::Result<usize> {
+async fn assign_pending_rides(pool: &MySqlPool) -> sqlx::Result<Vec<(String, String)>> {
     let mut tx = pool.begin().await?;
 
     // Lock chairs BEFORE the first consistent read. Another matcher cannot
@@ -66,7 +67,7 @@ async fn assign_pending_rides(pool: &MySqlPool) -> sqlx::Result<usize> {
     .await?;
     if chair_ids.is_empty() {
         tx.commit().await?;
-        return Ok(0);
+        return Ok(Vec::new());
     }
 
     // Keep the original eligibility rule: all six statuses of EVERY previous
@@ -98,16 +99,20 @@ async fn assign_pending_rides(pool: &MySqlPool) -> sqlx::Result<usize> {
     let chairs: Vec<AvailableChair> = query.build_query_as().fetch_all(&mut *tx).await?;
     if chairs.is_empty() {
         tx.commit().await?;
-        return Ok(0);
+        return Ok(Vec::new());
     }
 
     let rides: Vec<WaitingRide> = sqlx::query_as(
-        "SELECT id, pickup_latitude, pickup_longitude FROM rides
+        "SELECT id, user_id, pickup_latitude, pickup_longitude FROM rides
          WHERE chair_id IS NULL ORDER BY created_at, id LIMIT ? FOR UPDATE SKIP LOCKED",
     )
     .bind(chairs.len().min(MATCHING_BATCH_SIZE) as i64)
     .fetch_all(&mut *tx)
     .await?;
+    let users: std::collections::HashMap<_, _> = rides
+        .iter()
+        .map(|ride| (ride.id.clone(), ride.user_id.clone()))
+        .collect();
     let assignments = match_rides(rides, chairs);
     for (ride_id, chair_id) in &assignments {
         sqlx::query("UPDATE rides SET chair_id = ? WHERE id = ? AND chair_id IS NULL")
@@ -117,13 +122,22 @@ async fn assign_pending_rides(pool: &MySqlPool) -> sqlx::Result<usize> {
             .await?;
     }
     tx.commit().await?;
-    Ok(assignments.len())
+    Ok(assignments
+        .into_iter()
+        .map(|(ride_id, chair_id)| (users[&ride_id].clone(), chair_id))
+        .collect())
 }
 
 async fn internal_get_matching(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        notifications,
+    }): State<AppState>,
 ) -> Result<StatusCode, Error> {
-    assign_pending_rides(&pool).await?;
+    for (user_id, chair_id) in assign_pending_rides(&pool).await? {
+        notifications.notify(crate::notifications::Audience::User(user_id));
+        notifications.notify(crate::notifications::Audience::Chair(chair_id));
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -134,6 +148,7 @@ mod tests {
     fn ride(id: &str, latitude: i32) -> WaitingRide {
         WaitingRide {
             id: id.into(),
+            user_id: "test-user".into(),
             pickup_latitude: latitude,
             pickup_longitude: 0,
         }
@@ -249,7 +264,7 @@ mod tests {
 
         // Concurrent requests must neither overwrite rides nor reuse a chair.
         let (a, b) = tokio::join!(assign_pending_rides(&pool), assign_pending_rides(&pool));
-        assert_eq!(a? + b?, 2);
+        assert_eq!(a?.len() + b?.len(), 2);
         let assigned: Vec<(String, Option<String>)> = sqlx::query_as(
             "SELECT id, chair_id FROM rides WHERE id IN ('first', 'second', 'third') ORDER BY id",
         )
@@ -263,13 +278,13 @@ mod tests {
                 ("third".into(), None),
             ]
         );
-        assert_eq!(assign_pending_rides(&pool).await?, 0);
+        assert_eq!(assign_pending_rides(&pool).await?.len(), 0);
 
         // COMPLETED alone is insufficient: reuse starts only after its notification.
         sqlx::query("UPDATE ride_statuses SET chair_sent_at=NOW(6) WHERE id='status-5'")
             .execute(&pool)
             .await?;
-        assert_eq!(assign_pending_rides(&pool).await?, 1);
+        assert_eq!(assign_pending_rides(&pool).await?.len(), 1);
         let third: String = sqlx::query_scalar("SELECT chair_id FROM rides WHERE id='third'")
             .fetch_one(&pool)
             .await?;

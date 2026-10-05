@@ -1,0 +1,17 @@
+event,read_count,read_seconds,write_count,write_seconds,misc_count,misc_seconds
+wait/io/file/csv/data,0,0,0,0,0,0
+wait/io/file/csv/metadata,0,0,0,0,0,0
+wait/io/file/innodb/innodb_data_file,1,0.00019761996,33470,0.432556035864,2074,1.526552463456
+wait/io/file/innodb/innodb_dblwr_file,0,0,302,0.386666969976,0,0
+wait/io/file/innodb/innodb_log_file,0,0,83506,3.985699227528,45673,26.478403410792
+wait/io/file/innodb/innodb_temp_file,0,0,0,0,0,0
+wait/io/file/mysys/charset,0,0,0,0,0,0
+wait/io/file/mysys/cnf,0,0,0,0,0,0
+wait/io/file/sql/binlog,0,0,28761,2.29934517096,24894,34.63181160192
+wait/io/file/sql/binlog_index,0,0,0,0,0,0
+wait/io/file/sql/casetest,0,0,0,0,0,0
+wait/io/file/sql/ERRMSG,0,0,0,0,0,0
+wait/io/file/sql/io_cache,3189,0.12538976028,3401,0.442375598472,644,0.193746316632
+wait/io/file/sql/misc,0,0,0,0,0,0
+wait/io/file/sql/pid,0,0,0,0,0,0
+wait/io/file/sql/slow_log,0,0,1697472,11.293620490584,0,0

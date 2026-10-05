@@ -3,6 +3,16 @@ use axum::{http::StatusCode, response::Response};
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub pool: sqlx::MySqlPool,
+    pub notifications: notifications::NotificationHub,
+}
+
+impl AppState {
+    pub fn new(pool: sqlx::MySqlPool) -> Self {
+        Self {
+            pool,
+            notifications: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -11,6 +21,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("SQLx error: {0}")]
     Sqlx(#[from] sqlx::Error),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
     #[error("failed to initialize: stdout={stdout} stderr={stderr}")]
     Initialize { stdout: String, stderr: String },
     #[error("{0}")]
@@ -106,5 +118,6 @@ pub mod chair_handlers;
 pub mod internal_handlers;
 pub mod middlewares;
 pub mod models;
+pub mod notifications;
 pub mod owner_handlers;
 pub mod payment_gateway;

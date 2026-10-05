@@ -120,6 +120,8 @@ alp と slp は HTTP と SQL を個別に紐付けないため、HTTP 時間と 
 
 結合テストは通常実行では ignore される。上記の空 DB を用意し、リポジトリルートから次のコマンドで実行する（テストは DB 名と空の状態を確認してから fixture を入れる）。
 
+以下はこの計測時点のコマンド。SSE 追加後の全件実行にはもう一つ専用 DB が必要になるため、[更新後の検証手順](../2026-10-06-sse/README.md#検証)を使う。
+
 ```sh
 docker compose -f development/compose-local.yml -f development/compose-rust-local.yml run --rm --no-deps -T \
   -e TEST_DATABASE_URL=mysql://root:isucon@db/isuride_matching_test \

@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum_extra::extract::CookieJar;
 use ulid::Ulid;
 
-use crate::models::{Chair, ChairLocation, Coupon, Owner, PaymentToken, Ride, RideStatus, User};
+use crate::models::{Chair, ChairLocation, Coupon, Owner, PaymentToken, Ride, User};
 use crate::{AppState, Coordinate, Error};
 
 pub fn app_routes(app_state: AppState) -> axum::Router<AppState> {
@@ -273,7 +273,10 @@ struct AppPostRidesResponse {
 }
 
 async fn app_post_rides(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        notifications,
+    }): State<AppState>,
     axum::Extension(user): axum::Extension<User>,
     axum::Json(req): axum::Json<AppPostRidesRequest>,
 ) -> Result<(StatusCode, axum::Json<AppPostRidesResponse>), Error> {
@@ -380,6 +383,7 @@ async fn app_post_rides(
     .await?;
 
     tx.commit().await?;
+    notifications.notify(crate::notifications::Audience::User(user.id.clone()));
 
     Ok((
         StatusCode::ACCEPTED,
@@ -442,7 +446,10 @@ struct AppPostRideEvaluationResponse {
 }
 
 async fn app_post_ride_evaluation(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        notifications,
+    }): State<AppState>,
     Path((ride_id,)): Path<(String,)>,
     axum::Json(req): axum::Json<AppPostRideEvaluationRequest>,
 ) -> Result<axum::Json<AppPostRideEvaluationResponse>, Error> {
@@ -537,17 +544,15 @@ async fn app_post_ride_evaluation(
     .await?;
 
     tx.commit().await?;
+    notifications.notify(crate::notifications::Audience::User(ride.user_id.clone()));
+    if let Some(id) = &ride.chair_id {
+        notifications.notify(crate::notifications::Audience::Chair(id.clone()));
+    }
 
     Ok(axum::Json(AppPostRideEvaluationResponse {
         fare,
         completed_at: ride.updated_at.timestamp_millis(),
     }))
-}
-
-#[derive(Debug, serde::Serialize)]
-struct AppGetNotificationResponse {
-    data: Option<AppGetNotificationResponseData>,
-    retry_after_ms: Option<i32>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -578,49 +583,35 @@ struct AppGetNotificationResponseChairStats {
 }
 
 async fn app_get_notification(
-    State(AppState { pool, .. }): State<AppState>,
+    State(state): State<AppState>,
     axum::Extension(user): axum::Extension<User>,
-) -> Result<axum::Json<AppGetNotificationResponse>, Error> {
-    let mut tx = pool.begin().await?;
+    headers: axum::http::HeaderMap,
+) -> Result<axum::response::Response, Error> {
+    crate::notifications::respond(
+        state,
+        crate::notifications::Audience::User(user.id),
+        headers,
+    )
+    .await
+}
 
-    let Some(ride): Option<Ride> =
-        sqlx::query_as("SELECT * FROM rides WHERE user_id = ? ORDER BY created_at DESC LIMIT 1")
-            .bind(&user.id)
-            .fetch_optional(&mut *tx)
-            .await?
-    else {
-        return Ok(axum::Json(AppGetNotificationResponse {
-            data: None,
-            retry_after_ms: Some(30),
-        }));
-    };
-
-    let yet_sent_ride_status: Option<RideStatus> = sqlx::query_as("SELECT * FROM ride_statuses WHERE ride_id = ? AND app_sent_at IS NULL ORDER BY created_at ASC LIMIT 1")
-        .bind(&ride.id)
-        .fetch_optional(&mut *tx)
-        .await?;
-    let (ride_status_id, status) = if let Some(yet_sent_ride_status) = yet_sent_ride_status {
-        (Some(yet_sent_ride_status.id), yet_sent_ride_status.status)
-    } else {
-        (
-            None,
-            crate::get_latest_ride_status(&mut *tx, &ride.id).await?,
-        )
-    };
-
+pub(crate) async fn notification_payload(
+    conn: &mut sqlx::MySqlConnection,
+    row: &crate::notifications::NotificationRow,
+) -> Result<String, Error> {
+    let ride = &row.ride;
     let fare = calculate_discounted_fare(
-        &mut tx,
-        &user.id,
-        Some(&ride),
+        conn,
+        &ride.user_id,
+        Some(ride),
         ride.pickup_latitude,
         ride.pickup_longitude,
         ride.destination_latitude,
         ride.destination_longitude,
     )
     .await?;
-
     let mut data = AppGetNotificationResponseData {
-        ride_id: ride.id,
+        ride_id: ride.id.clone(),
         pickup_coordinate: Coordinate {
             latitude: ride.pickup_latitude,
             longitude: ride.pickup_longitude,
@@ -630,20 +621,17 @@ async fn app_get_notification(
             longitude: ride.destination_longitude,
         },
         fare,
-        status,
+        status: row.status.clone(),
         chair: None,
         created_at: ride.created_at.timestamp_millis(),
         updated_at: ride.updated_at.timestamp_millis(),
     };
-
-    if let Some(chair_id) = ride.chair_id {
+    if let Some(chair_id) = &ride.chair_id {
         let chair: Chair = sqlx::query_as("SELECT * FROM chairs WHERE id = ?")
             .bind(chair_id)
-            .fetch_one(&mut *tx)
+            .fetch_one(&mut *conn)
             .await?;
-
-        let stats = get_chair_stats(&mut tx, &chair.id).await?;
-
+        let stats = get_chair_stats(conn, chair_id).await?;
         data.chair = Some(AppGetNotificationResponseChair {
             id: chair.id,
             name: chair.name,
@@ -651,73 +639,32 @@ async fn app_get_notification(
             stats,
         });
     }
-
-    if let Some(ride_status_id) = ride_status_id {
-        sqlx::query("UPDATE ride_statuses SET app_sent_at = CURRENT_TIMESTAMP(6) WHERE id = ?")
-            .bind(ride_status_id)
-            .execute(&mut *tx)
-            .await?;
-    }
-
-    tx.commit().await?;
-
-    Ok(axum::Json(AppGetNotificationResponse {
-        data: Some(data),
-        retry_after_ms: Some(30),
-    }))
+    Ok(serde_json::to_string(&data)?)
 }
 
 async fn get_chair_stats(
     tx: &mut sqlx::MySqlConnection,
     chair_id: &str,
 ) -> Result<AppGetNotificationResponseChairStats, Error> {
-    let rides: Vec<Ride> =
-        sqlx::query_as("SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC")
-            .bind(chair_id)
-            .fetch_all(&mut *tx)
-            .await?;
-
-    let mut total_ride_count = 0;
-    let mut total_evaluation = 0.0;
-    for ride in rides {
-        let ride_statuses: Vec<RideStatus> =
-            sqlx::query_as("SELECT * FROM ride_statuses WHERE ride_id = ? ORDER BY created_at")
-                .bind(&ride.id)
-                .fetch_all(&mut *tx)
-                .await?;
-
-        if !ride_statuses
-            .iter()
-            .any(|status| status.status == "ARRIVED")
-        {
-            continue;
-        }
-        if !ride_statuses
-            .iter()
-            .any(|status| (status.status == "CARRYING"))
-        {
-            continue;
-        }
-        let is_completed = ride_statuses
-            .iter()
-            .any(|status| status.status == "COMPLETED");
-        if !is_completed {
-            continue;
-        }
-
-        total_ride_count += 1;
-        total_evaluation += ride.evaluation.unwrap() as f64;
-    }
-
-    let total_evaluation_avg = if total_ride_count > 0 {
-        total_evaluation / total_ride_count as f64
-    } else {
-        0.0
-    };
-
+    // Preserve the original eligibility checks without loading every ride and
+    // issuing another query for each ride's history on every notification.
+    let (count, evaluation): (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), CAST(COALESCE(SUM(r.evaluation), 0) AS SIGNED)
+         FROM rides r WHERE r.chair_id = ?
+           AND EXISTS (SELECT 1 FROM ride_statuses s WHERE s.ride_id=r.id AND s.status='CARRYING')
+           AND EXISTS (SELECT 1 FROM ride_statuses s WHERE s.ride_id=r.id AND s.status='ARRIVED')
+           AND EXISTS (SELECT 1 FROM ride_statuses s WHERE s.ride_id=r.id AND s.status='COMPLETED')",
+    )
+    .bind(chair_id)
+    .fetch_one(tx)
+    .await?;
     Ok(AppGetNotificationResponseChairStats {
-        total_rides_count: total_ride_count,
-        total_evaluation_avg,
+        total_rides_count: count as i32,
+        total_evaluation_avg: if count == 0 {
+            0.0
+        } else {
+            evaluation as f64 / count as f64
+        },
     })
 }
 
@@ -882,6 +829,46 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires TEST_DATABASE_URL pointing to isuride_matching_test"]
+    async fn chair_stats_aggregate_preserves_eligibility() -> anyhow::Result<()> {
+        let pool = sqlx::MySqlPool::connect(&std::env::var("TEST_DATABASE_URL")?).await?;
+        let mut conn = pool.acquire().await?;
+        let database: String = sqlx::query_scalar("SELECT DATABASE()")
+            .fetch_one(&mut *conn)
+            .await?;
+        assert_eq!(database, "isuride_matching_test");
+        for (i, evaluation, statuses) in [
+            (0, Some(5), vec!["CARRYING", "ARRIVED", "COMPLETED"]),
+            (
+                1,
+                Some(2),
+                vec!["CARRYING", "ARRIVED", "COMPLETED", "COMPLETED"],
+            ),
+            (2, None, vec!["CARRYING", "ARRIVED"]),
+            (3, Some(1), vec!["COMPLETED"]),
+        ] {
+            let id = format!("stats-ride-{i}");
+            sqlx::query("INSERT INTO rides (id,user_id,chair_id,pickup_latitude,pickup_longitude,destination_latitude,destination_longitude,evaluation) VALUES (?, 'stats-user', 'stats-chair', 0,0,0,0,?)")
+                .bind(&id).bind(evaluation).execute(&mut *conn).await?;
+            for (j, status) in statuses.iter().enumerate() {
+                sqlx::query("INSERT INTO ride_statuses (id,ride_id,status) VALUES (?,?,?)")
+                    .bind(format!("stats-status-{i}-{j}"))
+                    .bind(&id)
+                    .bind(status)
+                    .execute(&mut *conn)
+                    .await?;
+            }
+        }
+        let stats = get_chair_stats(&mut conn, "stats-chair").await?;
+        assert_eq!(stats.total_rides_count, 2);
+        assert_eq!(stats.total_evaluation_avg, 3.5);
+        let empty = get_chair_stats(&mut conn, "stats-empty").await?;
+        assert_eq!(empty.total_rides_count, 0);
+        assert_eq!(empty.total_evaluation_avg, 0.0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "requires TEST_DATABASE_URL pointing to isuride_matching_test"]
     async fn concurrent_invitations_respect_limit() -> anyhow::Result<()> {
         let pool = sqlx::MySqlPool::connect(&std::env::var("TEST_DATABASE_URL")?).await?;
         let database: String = sqlx::query_scalar("SELECT DATABASE()")
@@ -903,7 +890,7 @@ mod tests {
             date_of_birth: "2000-01-01".into(),
             invitation_code,
         };
-        let state = AppState { pool: pool.clone() };
+        let state = AppState::new(pool.clone());
         let (_, (_, axum::Json(inviter))) = app_post_users(
             State(state.clone()),
             CookieJar::new(),

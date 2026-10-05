@@ -1,0 +1,14 @@
+{
+  "window_start": 1791218296.159,
+  "window_end": 1791218353.759,
+  "connections_overlapping_window": {
+    "/api/app/notification": 1531,
+    "/api/chair/notification": 293
+  },
+  "statuses": {
+    "200": 1824
+  },
+  "user_agents": {
+    "isucandar": 1824
+  }
+}

@@ -189,6 +189,15 @@ def bench():
         run_benchmark(runs)
 
 
+def capture_file_io(path):
+    # Counters only: do not reset or enable instruments during the measurement.
+    columns = ["EVENT_NAME", "COUNT_READ", "SUM_TIMER_READ", "COUNT_WRITE", "SUM_TIMER_WRITE",
+               "COUNT_MISC", "SUM_TIMER_MISC"]
+    result = mysql("SELECT " + ",".join(columns) + " FROM performance_schema.file_summary_by_event_name "
+                   "WHERE COUNT_STAR>0 ORDER BY EVENT_NAME")
+    path.write_text("\t".join(columns) + "\n" + result + "\n")
+
+
 def run_benchmark(runs):
     directory = runs / datetime.now().strftime("%Y%m%d-%H%M%S")
     directory.mkdir()
@@ -234,6 +243,7 @@ def run_benchmark(runs):
         # A curl started before nginx reloaded can still be waiting on the old
         # upstream in a retiring worker. Reset it before the measured workload.
         command(COMPOSE + ["restart", "-t", "1", "matcher"])
+        capture_file_io(directory / "file-io-before.tsv")
         print("Running 60-second benchmark (database will be initialized)...", flush=True)
         with (directory / "bench.log").open("w") as log:
             process = subprocess.Popen(args, cwd=ROOT / "bench", stdout=subprocess.PIPE,
@@ -243,6 +253,7 @@ def run_benchmark(runs):
                 log.flush()
                 print(line, end="", flush=True)
             returncode = process.wait()
+        capture_file_io(directory / "file-io-after.tsv")
         metadata["benchmark_exit_code"] = returncode
         (directory / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     finally:

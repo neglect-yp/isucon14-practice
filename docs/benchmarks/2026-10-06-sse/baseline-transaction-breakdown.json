@@ -1,0 +1,55 @@
+{
+  "method": "SQL signature classification within BEGIN/COMMIT by MySQL Thread_id; sampled completion window; authentication queries outside transaction omitted",
+  "commits": 131485,
+  "commit_seconds": 292.4762490000444,
+  "groups": {
+    "boundary_unknown": {
+      "commits": 3,
+      "commit_seconds": 0.004434,
+      "queries": 0,
+      "query_seconds": 0.0
+    },
+    "other_read": {
+      "commits": 2143,
+      "commit_seconds": 0.07095099999999965,
+      "queries": 18428,
+      "query_seconds": 1.5542040000000004
+    },
+    "chair_notification_read": {
+      "commits": 37975,
+      "commit_seconds": 0.9787929999999679,
+      "queries": 227850,
+      "query_seconds": 14.140351000000258
+    },
+    "chair_notification_write": {
+      "commits": 5235,
+      "commit_seconds": 33.81142999999997,
+      "queries": 31410,
+      "query_seconds": 37.92616799999997
+    },
+    "coordinate_write": {
+      "commits": 32795,
+      "commit_seconds": 196.16242400000039,
+      "queries": 198295,
+      "query_seconds": 210.87276399999837
+    },
+    "app_notification_read": {
+      "commits": 44204,
+      "commit_seconds": 1.1477029999999773,
+      "queries": 435977,
+      "query_seconds": 30.04959600000017
+    },
+    "app_notification_write": {
+      "commits": 5240,
+      "commit_seconds": 34.17576500000003,
+      "queries": 58538,
+      "query_seconds": 41.862497999999995
+    },
+    "other_write": {
+      "commits": 3890,
+      "commit_seconds": 26.124748999999976,
+      "queries": 31186,
+      "query_seconds": 33.236921999999964
+    }
+  }
+}

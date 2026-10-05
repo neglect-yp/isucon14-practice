@@ -33,11 +33,16 @@ task profile:bench
 | `access.jsonl` / `slow.log` | 集計区間だけを抜き出した入力ログ |
 | `nginx.log` / `mysql-slow.log` | 初期化・検証も含む元ログ |
 | `metadata.json` | コマンド、コミット、ツール版、MySQL 設定の復元結果、時計差の概算 |
+| `file-io-before.tsv` / `file-io-after.tsv` | ベンチマーク起動前・終了後の Performance Schema ファイル I/O 累積値 |
 | `restore-mysql.sql` | 強制終了などで自動復元できなかった場合の復元用 SQL |
 
 ベンチマーカーを変更せず、既存の `時間経過 tick=...` の **最初と最後のログの間** を抽出します。60 秒走行のうち通常は約 57.6 秒です。初期化・事前検証・事後検証と、負荷走行の両端の少しの時間を除きます。正確な区間は `window.json` を確認してください。
 
 HTTP は nginx の `$msec`、SQL は MySQL の `End` を使い、同じ `[開始, 終了)` の **完了時刻** で抽出します。境界をまたいだリクエストとその SQL は異なる側に入ることがあります。内部 matcher のリクエストも含みます。
+
+**SSE の `request_time` は接続の継続時間で、通知の遅延ではありません。** 通知 API の alp 平均・p95 をポーリング時の応答時間と比較しないでください。集計終了時も接続中の SSE は alp に入りません。元の `nginx.log` にある `content_type=text/event-stream` を使い、`完了時刻 >= 集計開始` かつ `完了時刻 - response_time < 集計終了` の接続を数えると、区間に重なる SSE 接続数を別途確認できます。メッセージ数や配信遅延の計測には別の指標が必要です。
+
+ファイル I/O は `performance_schema.file_summary_by_event_name` を読み、カウンターのリセットや計測器の有効化は行いません。前後の差分が **初期化・事前検証・事後検証を含むベンチマーク全体** の値で、alp / slp の区間とは異なります。`SUM_TIMER_*` はピコ秒（秒への変換は 10^12 で除算）。`MISC` は同期など複数種類の操作を含み、すべてを fsync と見なしたり、特定 API の COMMIT 待ちと断定したりできません。[MySQL 公式資料](https://dev.mysql.com/doc/refman/8.4/en/performance-schema-file-summary-tables.html)
 
 slow log には SQL 以外に Ping / Prepare / Quit などのプロトコル操作も記録されます。slp はそれらを除外するため、元レコード数と SQL 集計件数を別々に記録します。CSV は slp の TSV 出力から変換し、SQL 中のカンマも正しく引用します。
 

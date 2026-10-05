@@ -265,10 +265,11 @@ FROM chairs
                                 created_at,
                                 ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_id ORDER BY created_at)) +
                                 ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_id ORDER BY created_at)) AS distance
-                         FROM chair_locations) tmp
+                         FROM chair_locations
+                         WHERE chair_id IN (SELECT id FROM chairs WHERE owner_id = ?)) tmp
                    GROUP BY chair_id) distance_table ON distance_table.chair_id = chairs.id
 WHERE owner_id = ?
-    "#).bind(owner.id).fetch_all(&pool).await?;
+    "#).bind(&owner.id).bind(&owner.id).fetch_all(&pool).await?;
 
     Ok(axum::Json(OwnerGetChairResponse {
         chairs: chairs
