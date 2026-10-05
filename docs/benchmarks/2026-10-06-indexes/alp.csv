@@ -1,0 +1,17 @@
+Count,2xx,4xx,5xx,Method,Uri,Sum,Avg,P95,P99,Max
+68019,68019,0,0,GET,/api/app/notification,652.725,0.010,0.029,0.055,0.335
+51452,51452,0,0,GET,/api/chair/notification,382.759,0.007,0.023,0.047,0.297
+19266,19266,0,0,POST,/api/chair/coordinate,249.156,0.013,0.030,0.056,0.353
+160,160,0,0,GET,/api/owner/chairs,43.084,0.269,0.657,0.789,0.813
+187,187,0,0,GET,/api/app/nearby-chairs,21.184,0.113,0.370,0.724,0.742
+101,101,0,0,POST,^/api/app/rides/[^/]+/evaluation$,9.256,0.092,0.472,0.552,0.595
+148,148,0,0,GET,/api/owner/sales,3.113,0.021,0.059,0.091,0.100
+175,175,0,0,POST,/api/app/rides,2.383,0.014,0.036,0.111,0.178
+210,210,0,0,POST,^/api/chair/rides/[^/]+/status$,2.249,0.011,0.029,0.052,0.070
+110,110,0,0,GET,/api/internal/matching,1.923,0.017,0.053,0.215,0.284
+187,187,0,0,GET,/api/app/rides,1.821,0.010,0.026,0.049,0.271
+96,96,0,0,POST,/api/app/users,1.101,0.011,0.033,0.045,0.045
+94,94,0,0,POST,/api/app/payment-methods,0.774,0.008,0.020,0.029,0.029
+175,175,0,0,POST,/api/app/rides/estimated-fare,0.589,0.003,0.012,0.023,0.030
+36,36,0,0,POST,/api/chair/activity,0.353,0.010,0.022,0.028,0.028
+36,36,0,0,POST,/api/chair/chairs,0.329,0.009,0.033,0.034,0.034

@@ -104,7 +104,9 @@ Rust 実装を利用する場合は、8080 番ポートを使用している `ta
 $ task rust:run
 ```
 
-`development/compose-local.yml` に `development/compose-rust-local.yml` を重ねて、Rust アプリケーションをコンテナで release ビルド・起動します。既存の MySQL を利用し、API は `http://localhost:8080` で公開します。マッチング用コンテナも Rust アプリケーションに接続します。
+`development/compose-local.yml` に `development/compose-rust-local.yml` を重ねて、Rust アプリケーションをコンテナで release ビルド・起動します。既存の MySQL を利用し、API は nginx 経由で `http://localhost:8080` に公開します。マッチング用コンテナも nginx を経由します。
+
+HTTP と SQL の負荷分析は `task profile:bench` で実行できます。DB を初期化して 60 秒計測し、alp / slp の結果を保存します。詳細は [計測手順](./development/profiling/README.md) を参照してください。
 
 ブラウザ用のフロントエンドは、別ターミナルで起動してください。
 

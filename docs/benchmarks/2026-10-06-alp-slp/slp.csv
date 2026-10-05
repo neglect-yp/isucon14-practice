@@ -1,0 +1,76 @@
+Count,Query,Sum(QueryTime),Avg(QueryTime),P95(QueryTime),Max(QueryTime),Sum(LockTime),Sum(RowsExamined),Avg(RowsExamined),Sum(RowsSent)
+70647,SELECT `status` FROM `ride_statuses` WHERE `ride_id` = 'S' ORDER BY `created_at` DESC LIMIT N,155.596373,0.002202,0.007673,0.309135,0.043949,337662209,4779.568970,70647
+67840,COMMIT,154.531109,0.002278,0.007589,0.906706,0.000000,0,0.000000,0
+27825,SELECT * FROM `ride_statuses` WHERE `ride_id` = 'S' AND `app_sent_at` IS NULL ORDER BY `created_at` LIMIT N,84.121335,0.003023,0.010154,0.292095,0.014379,133230301,4788.150979,531
+23623,SELECT * FROM `ride_statuses` WHERE `ride_id` = 'S' AND `chair_sent_at` IS NULL ORDER BY `created_at` LIMIT N,72.115157,0.003053,0.010002,0.318376,0.011632,113045673,4785.407146,511
+160,"SELECT `id`,`owner_id`,`name`,`access_token`,`model`,`is_active`,`created_at`,`updated_at`,IFNULL(`total_distance`, N) AS `total_distance`,`total_distance_updated_at` FROM `chairs` LEFT JOIN (SELECT `chair_id`,SUM(IFNULL(`distance`, N)) AS `total_distance`,MAX(`created_at`) AS `total_distance_updated_at` FROM (SELECT `chair_id`,`created_at`,ABS(`latitude` - LAG(`latitude`) OVER (PARTITION BY `chair_id` ORDER BY `created_at`)) + ABS(`longitude` - LAG(`longitude`) OVER (PARTITION BY `chair_id` ORDER BY `created_at`)) AS `distance` FROM `chair_locations`) AS `tmp` GROUP BY `chair_id`) AS `distance_table` ON `distance_table`.`chair_id` = `chairs`.`id` WHERE `owner_id` = 'S'",56.981918,0.356137,0.679688,1.294683,0.000112,86036,537.725000,1006
+19273,SELECT * FROM `ride_statuses` WHERE `ride_id` = 'S' ORDER BY `created_at`,52.206063,0.002709,0.009359,0.322203,0.011323,92196851,4783.731178,76135
+2075,SELECT * FROM `chair_locations` WHERE `chair_id` = 'S' ORDER BY `created_at` DESC LIMIT N,31.197250,0.015035,0.050546,0.100210,0.001939,63086104,30402.941687,2062
+48184,SELECT * FROM `rides` WHERE `chair_id` = 'S' ORDER BY `updated_at` DESC LIMIT N,18.677610,0.000388,0.001473,0.059561,0.028177,39515475,820.095364,39323
+48403,SELECT * FROM `chairs` WHERE `access_token` = 'S',16.761250,0.000346,0.001161,0.058918,0.030650,25722998,531.433961,48403
+27835,SELECT * FROM `rides` WHERE `user_id` = 'S' ORDER BY `created_at` DESC LIMIT N,10.783990,0.000387,0.001404,0.025828,0.014451,22979259,825.552685,27835
+28091,SELECT * FROM `coupons` WHERE `used_by` = 'S',8.131778,0.000289,0.001154,0.051783,0.025255,16211781,577.116550,20502
+867,"SELECT `rides`.* FROM `rides` JOIN `ride_statuses` ON `rides`.`id` = `ride_statuses`.`ride_id` WHERE `chair_id` = 'S' AND `status` = 'S' AND `updated_at` BETWEEN 'S' AND DATE_ADD('S', INTERVAL N MICROSECOND)",5.758031,0.006641,0.021292,0.034452,0.000443,4855858,5600.758939,1148
+10746,SELECT * FROM `rides` WHERE `chair_id` = 'S' ORDER BY `updated_at` DESC,4.190060,0.000390,0.001422,0.022951,0.005643,8730668,812.457473,19276
+197,SELECT COUNT(N) = N FROM (SELECT COUNT(`chair_sent_at`) = N AS `completed` FROM `ride_statuses` WHERE `ride_id` IN (SELECT `id` FROM `rides` WHERE `chair_id` = 'S') GROUP BY `ride_id`) AS `is_completed` WHERE `completed` = N,4.010320,0.020357,0.065303,0.101904,0.000117,104,0.527919,197
+93,UPDATE `rides` SET `chair_id`='S' WHERE `id` = 'S',2.170479,0.023338,0.092968,0.549561,0.000049,93,1.000000,0
+23617,SELECT * FROM `users` WHERE `id` = 'S' for share,2.100591,0.000089,0.000338,0.016471,0.013653,23617,1.000000,23617
+13163,"INSERT INTO `chair_locations` (`id`,`chair_id`,`latitude`,`longitude`) VALUES ('S','S',N,N)",2.054704,0.000156,0.000259,0.042597,0.006423,0,0.000000,0
+28490,SELECT * FROM `users` WHERE `access_token` = 'S',1.985824,0.000070,0.000211,0.020416,0.018690,28490,1.000000,28490
+76982,START TRANSACTION,1.874302,0.000024,0.000055,0.009316,0.000000,0,0.000000,0
+3841,SELECT * FROM `rides` WHERE `chair_id` = 'S' ORDER BY `created_at` DESC,1.668554,0.000434,0.001572,0.021782,0.001799,3150324,820.183286,5800
+531,UPDATE `ride_statuses` SET `app_sent_at`=CURRENT_TIMESTAMP(N) WHERE `id` = 'S',1.620609,0.003052,0.006416,0.563137,1.211681,531,1.000000,0
+15724,SELECT * FROM `chair_locations` WHERE `id` = 'S',1.048217,0.000067,0.000141,0.042432,0.003363,15724,1.000000,15724
+10822,SELECT * FROM `chairs` WHERE `id` = 'S',0.822297,0.000076,0.000244,0.037176,0.019476,10822,1.000000,10822
+73,"INSERT INTO `payment_tokens` (`user_id`,`token`) VALUES ('S','S')",0.751808,0.010299,0.080567,0.086111,0.000044,0,0.000000,0
+511,UPDATE `ride_statuses` SET `chair_sent_at`=CURRENT_TIMESTAMP(N) WHERE `id` = 'S',0.706432,0.001382,0.005340,0.255077,0.054306,511,1.000000,0
+28,"INSERT INTO `chairs` (`id`,`owner_id`,`name`,`model`,`is_active`,`access_token`) VALUES ('S','S','S','S',N,'S')",0.445190,0.015900,0.091823,0.108016,0.000015,0,0.000000,0
+9098,ROLLBACK,0.392509,0.000043,0.000132,0.007413,0.000000,0,0.000000,0
+28,UPDATE `chairs` SET `is_active`=N WHERE `id` = 'S',0.321579,0.011485,0.059750,0.064886,0.000010,28,1.000000,0
+532,"INSERT INTO `ride_statuses` (`id`,`ride_id`,`status`) VALUES ('S','S','S')",0.307071,0.000577,0.002934,0.041927,0.000197,0,0.000000,0
+1028,"INSERT INTO `chair_locations` (`id`,`chair_id`,`latitude`,`longitude`) VALUES ('S','S',N,-N)",0.170019,0.000165,0.000226,0.040177,0.000379,0,0.000000,0
+902,"INSERT INTO `chair_locations` (`id`,`chair_id`,`latitude`,`longitude`) VALUES ('S','S',-N,-N)",0.152935,0.000170,0.000265,0.024300,0.000351,0,0.000000,0
+134,SELECT * FROM `chairs`,0.117638,0.000878,0.003767,0.012992,0.000053,70858,528.791045,70858
+631,"INSERT INTO `chair_locations` (`id`,`chair_id`,`latitude`,`longitude`) VALUES ('S','S',-N,N)",0.080378,0.000127,0.000330,0.014179,0.000233,0,0.000000,0
+80,"INSERT INTO `coupons` (`user_id`,`code`,`discount`) VALUES ('S','S',N)",0.073848,0.000923,0.002982,0.019661,0.000024,0,0.000000,0
+74,"INSERT INTO `users` (`id`,`username`,`firstname`,`lastname`,`date_of_birth`,`access_token`,`invitation_code`) VALUES ('S','S','S','S','S','S','S')",0.071450,0.000966,0.005965,0.021886,0.000024,0,0.000000,0
+134,SELECT * FROM `rides` WHERE `user_id` = 'S' ORDER BY `created_at` DESC,0.061628,0.000460,0.002609,0.004122,0.000058,108555,810.111940,76
+136,SELECT * FROM `chairs` WHERE `owner_id` = 'S',0.061300,0.000451,0.002254,0.005300,0.003447,72521,533.242647,903
+197,SELECT * FROM `chairs` JOIN (SELECT `id` FROM `chairs` WHERE `is_active` = N ORDER BY RAND() LIMIT N) AS `tmp` ON `chairs`.`id` = `tmp`.`id` LIMIT N,0.053372,0.000271,0.001101,0.003395,0.000131,104542,530.670051,197
+41,SELECT * FROM `coupons` WHERE `user_id` = 'S' AND `used_by` IS NULL ORDER BY `created_at` LIMIT N,0.051753,0.001262,0.000478,0.044823,0.000009,72,1.756098,10
+113,SELECT * FROM `rides` WHERE `user_id` = 'S',0.042964,0.000380,0.001255,0.004189,0.000560,92190,815.840708,65
+95,SELECT * FROM `rides` WHERE `chair_id` IS NULL ORDER BY `created_at` LIMIT N,0.035829,0.000377,0.001294,0.004375,0.000026,77747,818.389474,94
+81,UPDATE `rides` SET `evaluation`=N WHERE `id` = 'S',0.028880,0.000357,0.001701,0.004098,0.000042,81,1.000000,0
+113,SELECT COUNT(N) FROM `rides` WHERE `user_id` = 'S',0.026884,0.000238,0.001143,0.002312,0.000031,92303,816.840708,113
+296,SELECT * FROM `owners` WHERE `access_token` = 'S',0.024948,0.000084,0.000256,0.006969,0.000494,296,1.000000,296
+41,SELECT * FROM `coupons` WHERE `user_id` = 'S' AND `used_by` IS NULL ORDER BY `created_at` LIMIT N for update,0.022953,0.000560,0.001995,0.011917,0.000016,72,1.756098,10
+51,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',N,N,N,N)",0.018307,0.000359,0.001283,0.009789,0.000008,0,0.000000,0
+275,SELECT * FROM `rides` WHERE `id` = 'S',0.016414,0.000060,0.000238,0.001999,0.000695,275,1.000000,275
+82,UPDATE `coupons` SET `used_by`='S' WHERE `user_id` = 'S' AND `code` = 'S',0.014832,0.000181,0.000516,0.005412,0.000018,82,1.000000,0
+6,SELECT * FROM `coupons` WHERE `code` = 'S' for update,0.011732,0.001955,0.009818,0.009818,0.009543,3329,554.833333,0
+72,SELECT * FROM `coupons` WHERE `user_id` = 'S' AND `code` = 'S' AND `used_by` IS NULL for update,0.010825,0.000150,0.000355,0.006601,0.006573,72,1.000000,72
+81,SELECT `value` FROM `settings` WHERE `name` = 'S',0.009605,0.000119,0.000645,0.001230,0.000046,81,1.000000,81
+175,SELECT * FROM `rides` WHERE `id` = 'S' for update,0.008700,0.000050,0.000141,0.000779,0.000063,175,1.000000,175
+81,SELECT * FROM `payment_tokens` WHERE `user_id` = 'S',0.008440,0.000104,0.000465,0.002131,0.000029,81,1.000000,81
+113,SELECT * FROM `coupons` WHERE `user_id` = 'S' AND `code` = 'S' AND `used_by` IS NULL,0.007608,0.000067,0.000173,0.001613,0.000040,72,0.637168,72
+133,SELECT CURRENT_TIMESTAMP(N),0.006670,0.000050,0.000256,0.000997,0.000000,133,1.000000,133
+12,SELECT * FROM `rides` WHERE `user_id` = 'S' ORDER BY `created_at`,0.004275,0.000356,0.001058,0.001058,0.000003,9980,831.666667,16
+8,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',N,-N,-N,-N)",0.004114,0.000514,0.002624,0.002624,0.000003,0,0.000000,0
+76,SELECT * FROM `owners` WHERE `id` = 'S',0.003686,0.000048,0.000195,0.000598,0.000027,76,1.000000,76
+28,SELECT * FROM `owners` WHERE `chair_register_token` = 'S',0.002650,0.000095,0.000591,0.000695,0.000011,28,1.000000,28
+6,"INSERT INTO `coupons` (`user_id`,`code`,`discount`) VALUES ('S',CONCAT('S', 'S', FLOOR(UNIX_TIMESTAMP(NOW(N)) * N)),N)",0.001211,0.000202,0.000519,0.000519,0.000001,0,0.000000,0
+7,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',-N,-N,-N,-N)",0.001038,0.000148,0.000539,0.000539,0.000001,0,0.000000,0
+5,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',-N,-N,-N,N)",0.000834,0.000167,0.000616,0.000616,0.000002,0,0.000000,0
+4,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',-N,N,-N,N)",0.000790,0.000198,0.000591,0.000591,0.000002,0,0.000000,0
+7,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',-N,N,N,N)",0.000753,0.000108,0.000433,0.000433,0.000001,0,0.000000,0
+4,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',-N,N,-N,-N)",0.000633,0.000158,0.000455,0.000455,0.000002,0,0.000000,0
+7,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',N,-N,N,N)",0.000331,0.000047,0.000075,0.000075,0.000002,0,0.000000,0
+5,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',N,N,N,-N)",0.000235,0.000047,0.000067,0.000067,0.000002,0,0.000000,0
+4,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',-N,-N,N,-N)",0.000184,0.000046,0.000060,0.000060,0.000001,0,0.000000,0
+6,SELECT * FROM `users` WHERE `invitation_code` = 'S',0.000148,0.000025,0.000035,0.000035,0.000004,6,1.000000,6
+3,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',N,-N,-N,N)",0.000127,0.000042,0.000047,0.000047,0.000001,0,0.000000,0
+3,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',N,-N,N,-N)",0.000116,0.000039,0.000049,0.000049,0.000002,0,0.000000,0
+2,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',N,N,-N,-N)",0.000076,0.000038,0.000045,0.000045,0.000000,0,0.000000,0
+1,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',N,N,-N,N)",0.000065,0.000065,0.000065,0.000065,0.000001,0,0.000000,0
+1,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',-N,N,N,-N)",0.000051,0.000051,0.000051,0.000051,0.000000,0,0.000000,0
+1,"INSERT INTO `rides` (`id`,`user_id`,`pickup_latitude`,`pickup_longitude`,`destination_latitude`,`destination_longitude`) VALUES ('S','S',-N,-N,N,N)",0.000042,0.000042,0.000042,0.000042,0.000000,0,0.000000,0

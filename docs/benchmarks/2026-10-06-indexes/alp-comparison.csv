@@ -1,0 +1,17 @@
+Method,Uri,CountBefore,CountAfter,AvgMsBefore,AvgMsAfter,P95MsBefore,P95MsAfter,SumSecondsBefore,SumSecondsAfter
+GET,/api/app/notification,27816,68019,37.0,10.0,91.0,29.0,1017.889,652.725
+GET,/api/chair/notification,32451,51452,24.0,7.0,65.0,23.0,794.808,382.759
+POST,/api/chair/coordinate,15718,19266,29.0,13.0,67.0,30.0,461.372,249.156
+GET,/api/app/nearby-chairs,133,187,519.0,113.0,1448.0,370.0,69.037,21.184
+GET,/api/owner/chairs,160,160,370.0,269.0,708.0,657.0,59.257,43.084
+GET,/api/owner/sales,131,148,91.0,21.0,218.0,59.0,11.882,3.113
+POST,^/api/app/rides/[^/]+/evaluation$,80,101,140.0,92.0,510.0,472.0,11.164,9.256
+GET,/api/internal/matching,95,110,95.0,17.0,286.0,53.0,8.979,1.923
+POST,/api/app/rides,113,175,64.0,14.0,264.0,36.0,7.188,2.383
+POST,^/api/chair/rides/[^/]+/status$,175,210,30.0,11.0,71.0,29.0,5.330,2.249
+GET,/api/app/rides,134,187,17.0,10.0,53.0,26.0,2.270,1.821
+POST,/api/app/users,74,96,24.0,11.0,85.0,33.0,1.803,1.101
+POST,/api/app/payment-methods,72,94,20.0,8.0,84.0,20.0,1.456,0.774
+POST,/api/app/rides/estimated-fare,113,175,12.0,3.0,39.0,12.0,1.321,0.589
+POST,/api/chair/chairs,28,36,28.0,9.0,96.0,33.0,0.776,0.329
+POST,/api/chair/activity,28,36,23.0,10.0,73.0,22.0,0.637,0.353

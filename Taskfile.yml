@@ -1,6 +1,24 @@
 version: "3"
 
 tasks:
+  profile:install:
+    desc: Install pinned alp and slp binaries into _tmp/profile-tools/bin
+    cmd: python3 development/profiling/profile.py install
+  profile:bench:
+    desc: Run a 60-second Rust benchmark and analyze HTTP/SQL logs (resets DB)
+    cmds:
+      - task: profile:install
+      - task: rust:run
+      - python3 development/profiling/profile.py bench
+  profile:analyze:
+    desc: Reanalyze saved logs (task profile:analyze -- _tmp/profiles/RUN)
+    cmd: python3 development/profiling/profile.py analyze {{.CLI_ARGS}}
+  alp:
+    desc: Run the local alp binary
+    cmd: _tmp/profile-tools/bin/alp {{.CLI_ARGS}}
+  slp:
+    desc: Run the local slp binary
+    cmd: _tmp/profile-tools/bin/slp {{.CLI_ARGS}}
   init:
     cmds:
       - go install github.com/sqldef/sqldef/cmd/mysqldef@latest
@@ -37,7 +55,10 @@ tasks:
   rust:run:
     deps:
       - rust:build
-    cmd: docker compose -f compose-local.yml -f compose-rust-local.yml up -d
+    cmds:
+      - docker compose -f compose-local.yml -f compose-rust-local.yml up -d
+      # Resolve webapp again after a rebuild changes its container address.
+      - docker compose -f compose-local.yml -f compose-rust-local.yml exec -T nginx nginx -s reload
     dir: development
   perl:run:
     cmd: carton exec plackup -s Starlet -p 8080 -Ilib -r app.psgi
