@@ -231,6 +231,9 @@ def run_benchmark(runs):
             time.sleep(1)
         else:
             raise RuntimeError("Rust app did not become ready behind nginx")
+        # A curl started before nginx reloaded can still be waiting on the old
+        # upstream in a retiring worker. Reset it before the measured workload.
+        command(COMPOSE + ["restart", "-t", "1", "matcher"])
         print("Running 60-second benchmark (database will be initialized)...", flush=True)
         with (directory / "bench.log").open("w") as log:
             process = subprocess.Popen(args, cwd=ROOT / "bench", stdout=subprocess.PIPE,
@@ -254,6 +257,7 @@ def run_benchmark(runs):
         mysql(recovery)
         command(COMPOSE + ["restart", "webapp"])
         command(COMPOSE + ["exec", "-T", "nginx", "nginx", "-s", "reload"])
+        command(COMPOSE + ["restart", "-t", "1", "matcher"])
         metadata["mysql_after"] = dict(zip(VARIABLES, mysql("SELECT " + ",".join("@@GLOBAL." + v for v in VARIABLES)).split("\t")))
         (directory / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
         with (directory / "nginx.log").open("w") as dest:

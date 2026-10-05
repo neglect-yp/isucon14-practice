@@ -1,0 +1,38 @@
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+chairs	0	PRIMARY	1	id	A	556	NULL	NULL		BTREE			YES	NULL
+chairs	1	idx_chairs_access_token	1	access_token	A	556	NULL	NULL		BTREE			YES	NULL
+chairs	1	idx_chairs_is_active	1	is_active	A	2	NULL	NULL		BTREE			YES	NULL
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+rides	0	PRIMARY	1	id	A	943	NULL	NULL		BTREE			YES	NULL
+rides	1	idx_rides_user_id_created_at	1	user_id	A	504	NULL	NULL		BTREE			YES	NULL
+rides	1	idx_rides_user_id_created_at	2	created_at	A	823	NULL	NULL		BTREE			YES	NULL
+rides	1	idx_rides_chair_id_updated_at	1	chair_id	A	431	NULL	NULL	YES	BTREE			YES	NULL
+rides	1	idx_rides_chair_id_updated_at	2	updated_at	A	943	NULL	NULL		BTREE			YES	NULL
+rides	1	idx_rides_chair_id_created_at	1	chair_id	A	431	NULL	NULL	YES	BTREE			YES	NULL
+rides	1	idx_rides_chair_id_created_at	2	created_at	A	943	NULL	NULL		BTREE			YES	NULL
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+coupons	0	PRIMARY	1	user_id	A	684	NULL	NULL		BTREE			YES	NULL
+coupons	0	PRIMARY	2	code	A	1071	NULL	NULL		BTREE			YES	NULL
+coupons	1	idx_coupons_used_by	1	used_by	A	836	NULL	NULL	YES	BTREE			YES	NULL
+coupons	1	idx_coupons_code	1	code	A	620	NULL	NULL		BTREE			YES	NULL
+coupons	1	idx_coupons_user_id_used_by_created_at	1	user_id	A	684	NULL	NULL		BTREE			YES	NULL
+coupons	1	idx_coupons_user_id_used_by_created_at	2	used_by	A	1022	NULL	NULL	YES	BTREE			YES	NULL
+coupons	1	idx_coupons_user_id_used_by_created_at	3	created_at	A	1071	NULL	NULL		BTREE			YES	NULL
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	rides	NULL	ref	idx_rides_user_id_created_at	idx_rides_user_id_created_at	106	const	1	100.00	Backward index scan
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	rides	NULL	ref	idx_rides_chair_id_updated_at,idx_rides_chair_id_created_at	idx_rides_chair_id_updated_at	107	const	1	100.00	Backward index scan
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	chairs	NULL	ref	idx_chairs_access_token	idx_chairs_access_token	1022	const	1	100.00	NULL
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	coupons	NULL	ref	idx_coupons_used_by	idx_coupons_used_by	107	const	1	100.00	NULL
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	coupons	NULL	ref	PRIMARY,idx_coupons_used_by,idx_coupons_code,idx_coupons_user_id_used_by_created_at	idx_coupons_code	1022	const	1	100.00	Using index
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	coupons	NULL	ref	PRIMARY,idx_coupons_used_by,idx_coupons_user_id_used_by_created_at	idx_coupons_user_id_used_by_created_at	213	const,const	3	10.00	Using index condition
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	chairs	NULL	ref	idx_chairs_is_active	idx_chairs_is_active	1	const	219	100.00	Using index
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	rides	NULL	ref	idx_rides_chair_id_updated_at,idx_rides_chair_id_created_at	idx_rides_chair_id_created_at	107	const	1	100.00	Using index condition
+id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	SIMPLE	chair_locations	NULL	ref	idx_chair_locations_chair_id_created_at	idx_chair_locations_chair_id_created_at	106	const	45	100.00	Backward index scan; Using index

@@ -68,6 +68,31 @@ async fn app_post_users(
 
     let mut tx = pool.begin().await?;
 
+    // Serialize invitations on the inviter's existing row, before reading the
+    // coupon count or inserting coupons. Locking an absent coupon code would
+    // lock index gaps and can deadlock with another registration or ride.
+    let inviter = if let Some(code) = req.invitation_code.filter(|code| !code.is_empty()) {
+        let Some(inviter): Option<User> =
+            sqlx::query_as("SELECT * FROM users WHERE invitation_code = ? FOR UPDATE")
+                .bind(&code)
+                .fetch_optional(&mut *tx)
+                .await?
+        else {
+            return Err(Error::BadRequest("この招待コードは使用できません。"));
+        };
+        // This is the transaction's first consistent read, after the row lock.
+        let invitations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM coupons WHERE code = ?")
+            .bind(format!("INV_{code}"))
+            .fetch_one(&mut *tx)
+            .await?;
+        if invitations >= 3 {
+            return Err(Error::BadRequest("この招待コードは使用できません。"));
+        }
+        Some((inviter, code))
+    } else {
+        None
+    };
+
     sqlx::query("INSERT INTO users (id, username, firstname, lastname, date_of_birth, access_token, invitation_code) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .bind(&user_id)
         .bind(req.username)
@@ -88,43 +113,22 @@ async fn app_post_users(
         .await?;
 
     // 招待コードを使った登録
-    if let Some(req_invitation_code) = req.invitation_code {
-        if !req_invitation_code.is_empty() {
-            // 招待する側の招待数をチェック
-            let coupons: Vec<Coupon> =
-                sqlx::query_as("SELECT * FROM coupons WHERE code = ? FOR UPDATE")
-                    .bind(format!("INV_{req_invitation_code}"))
-                    .fetch_all(&mut *tx)
-                    .await?;
-            if coupons.len() >= 3 {
-                return Err(Error::BadRequest("この招待コードは使用できません。"));
-            }
-
-            // ユーザーチェック
-            let Some(inviter): Option<User> =
-                sqlx::query_as("SELECT * FROM users WHERE invitation_code = ?")
-                    .bind(&req_invitation_code)
-                    .fetch_optional(&mut *tx)
-                    .await?
-            else {
-                return Err(Error::BadRequest("この招待コードは使用できません。"));
-            };
-
-            // 招待クーポン付与
-            sqlx::query("INSERT INTO coupons (user_id, code, discount) VALUES (?, ?, ?)")
-                .bind(&user_id)
-                .bind(format!("INV_{req_invitation_code}"))
-                .bind(1500)
-                .execute(&mut *tx)
-                .await?;
-            // 招待した人にもRewardを付与
-            sqlx::query("INSERT INTO coupons (user_id, code, discount) VALUES (?, CONCAT(?, '_', FLOOR(UNIX_TIMESTAMP(NOW(3))*1000)), ?)")
-                .bind(inviter.id)
-                .bind(format!("RWD_{req_invitation_code}"))
-                .bind(1000)
-                .execute(&mut *tx)
-                .await?;
-        }
+    if let Some((inviter, req_invitation_code)) = inviter {
+        // 招待クーポン付与
+        sqlx::query("INSERT INTO coupons (user_id, code, discount) VALUES (?, ?, ?)")
+            .bind(&user_id)
+            .bind(format!("INV_{req_invitation_code}"))
+            .bind(1500)
+            .execute(&mut *tx)
+            .await?;
+        // 招待した人にもRewardを付与
+        // The invited user's ID also makes rewards unique within one millisecond.
+        sqlx::query("INSERT INTO coupons (user_id, code, discount) VALUES (?, ?, ?)")
+            .bind(inviter.id)
+            .bind(format!("RWD_{req_invitation_code}_{user_id}"))
+            .bind(1000)
+            .execute(&mut *tx)
+            .await?;
     }
 
     tx.commit().await?;
@@ -870,4 +874,84 @@ async fn calculate_discounted_fare(
     let discounted_metered_fare = std::cmp::max(metered_fare - discount, 0);
 
     Ok(crate::INITIAL_FARE + discounted_metered_fare)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore = "requires TEST_DATABASE_URL pointing to isuride_matching_test"]
+    async fn concurrent_invitations_respect_limit() -> anyhow::Result<()> {
+        let pool = sqlx::MySqlPool::connect(&std::env::var("TEST_DATABASE_URL")?).await?;
+        let database: String = sqlx::query_scalar("SELECT DATABASE()")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(
+            database, "isuride_matching_test",
+            "use a disposable test database"
+        );
+        let existing: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(existing, 0, "test database must be empty");
+
+        let request = |username: String, invitation_code| AppPostUsersRequest {
+            username,
+            firstname: "test".into(),
+            lastname: "test".into(),
+            date_of_birth: "2000-01-01".into(),
+            invitation_code,
+        };
+        let state = AppState { pool: pool.clone() };
+        let (_, (_, axum::Json(inviter))) = app_post_users(
+            State(state.clone()),
+            CookieJar::new(),
+            axum::Json(request("inviter".into(), None)),
+        )
+        .await?;
+        let mut registrations = tokio::task::JoinSet::new();
+        for i in 0..8 {
+            let state = state.clone();
+            let req = request(
+                format!("invitee-{i}"),
+                Some(inviter.invitation_code.clone()),
+            );
+            registrations.spawn(async move {
+                app_post_users(State(state), CookieJar::new(), axum::Json(req)).await
+            });
+        }
+        let mut accepted = 0;
+        let mut rejected = 0;
+        while let Some(result) = registrations.join_next().await {
+            match result? {
+                Ok((_, (StatusCode::CREATED, _))) => accepted += 1,
+                Err(Error::BadRequest(_)) => rejected += 1,
+                other => panic!("unexpected registration result: {other:?}"),
+            }
+        }
+        assert_eq!((accepted, rejected), (3, 5));
+        let users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(
+            users, 4,
+            "rejected registrations must not leave users behind"
+        );
+        let coupons: Vec<(i32, i64)> = sqlx::query_as(
+            "SELECT discount, COUNT(*) FROM coupons GROUP BY discount ORDER BY discount",
+        )
+        .fetch_all(&pool)
+        .await?;
+        assert_eq!(coupons, vec![(1000, 3), (1500, 3), (3000, 4)]);
+        let invalid = app_post_users(
+            State(state),
+            CookieJar::new(),
+            axum::Json(request("invalid".into(), Some("missing".into()))),
+        )
+        .await;
+        assert!(matches!(invalid, Err(Error::BadRequest(_))));
+        pool.close().await;
+        Ok(())
+    }
 }

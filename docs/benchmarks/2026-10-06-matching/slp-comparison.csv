@@ -1,0 +1,5 @@
+Query,Count before,Count after,Sum(QueryTime) before,Sum(QueryTime) after,Avg(QueryTime) before,Avg(QueryTime) after,Avg(RowsExamined) before,Avg(RowsExamined) after
+SELECT * FROM `rides` WHERE `user_id` = 'S' ORDER BY `created_at` DESC LIMIT N,68029,49453,36.769827,4.025825,0.000541,0.000081,861.541710,1.000000
+SELECT * FROM `rides` WHERE `chair_id` = 'S' ORDER BY `updated_at` DESC LIMIT N,70728,78195,35.854274,7.727474,0.000507,0.000099,853.439897,0.969576
+SELECT * FROM `chairs` WHERE `access_token` = 'S',70986,80356,29.865932,5.159760,0.000421,0.000064,536.202322,1.000000
+SELECT * FROM `coupons` WHERE `used_by` = 'S',68448,54029,18.769059,3.234052,0.000274,0.000060,595.475383,0.702863

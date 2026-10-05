@@ -1,0 +1,19 @@
+Intermediate run 20261006-005420: selected InnoDB deadlock lines; literal values replaced with placeholders.
+2026-10-05 15:55:21 276033454468864
+*** (1) TRANSACTION:
+TRANSACTION 106294, ACTIVE 0 sec starting index read
+LOCK WAIT 5 lock struct(s), heap size 1128, 2 row lock(s), undo log entries 2
+SELECT * FROM coupons WHERE user_id = '?' AND used_by IS NULL ORDER BY created_at LIMIT 1 FOR UPDATE
+*** (1) HOLDS THE LOCK(S):
+RECORD LOCKS space id 61 page no 8 n bits 312 index idx_coupons_used_by of table `isuride`.`coupons` trx id 106294 lock_mode X
+*** (1) WAITING FOR THIS LOCK TO BE GRANTED:
+RECORD LOCKS space id 61 page no 22 n bits 216 index PRIMARY of table `isuride`.`coupons` trx id 106294 lock_mode X locks rec but not gap waiting
+*** (2) TRANSACTION:
+TRANSACTION 106282, ACTIVE 0 sec inserting
+LOCK WAIT 14 lock struct(s), heap size 1128, 931 row lock(s), undo log entries 4
+INSERT INTO coupons (user_id, code, discount) VALUES ('?', CONCAT('?', '?', FLOOR(UNIX_TIMESTAMP(NOW(3))*1000)), 1000)
+*** (2) HOLDS THE LOCK(S):
+RECORD LOCKS space id 61 page no 22 n bits 216 index PRIMARY of table `isuride`.`coupons` trx id 106282 lock_mode X
+*** (2) WAITING FOR THIS LOCK TO BE GRANTED:
+RECORD LOCKS space id 61 page no 8 n bits 312 index idx_coupons_used_by of table `isuride`.`coupons` trx id 106282 lock_mode X locks gap before rec insert intention waiting
+*** WE ROLL BACK TRANSACTION (1)

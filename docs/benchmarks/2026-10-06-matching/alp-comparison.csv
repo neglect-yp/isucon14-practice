@@ -1,0 +1,17 @@
+Method,Uri,Count before,Count after,Avg before,Avg after,P95 before,P95 after
+GET,/api/chair/notification,51452,45394,0.007,0.110,0.023,0.284
+GET,/api/app/notification,68019,49445,0.010,0.088,0.029,0.256
+POST,/api/chair/coordinate,19266,32795,0.013,0.098,0.030,0.263
+GET,/api/app/nearby-chairs,187,1181,0.113,0.432,0.370,1.083
+POST,^/api/app/rides/[^/]+/evaluation$,101,806,0.092,0.585,0.472,1.574
+POST,^/api/chair/rides/[^/]+/status$,210,1810,0.011,0.130,0.029,0.312
+GET,/api/app/rides,187,1201,0.010,0.109,0.026,0.285
+POST,/api/app/rides,175,932,0.014,0.135,0.036,0.336
+POST,/api/app/rides/estimated-fare,175,941,0.003,0.127,0.012,0.327
+GET,/api/owner/chairs,160,154,0.269,0.427,0.657,0.789
+POST,/api/chair/chairs,36,194,0.009,0.131,0.033,0.601
+POST,/api/app/payment-methods,94,258,0.008,0.091,0.020,0.259
+GET,/api/owner/sales,148,155,0.021,0.135,0.059,0.337
+POST,/api/chair/activity,36,194,0.010,0.105,0.022,0.248
+POST,/api/app/users,96,253,0.011,0.055,0.033,0.179
+GET,/api/internal/matching,110,91,0.017,0.120,0.053,0.316

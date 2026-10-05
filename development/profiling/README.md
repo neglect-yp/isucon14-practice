@@ -1,6 +1,6 @@
 # alp / slp によるローカル計測
 
-Rust のローカル構成は `localhost:8080 → nginx → webapp:8080 → MySQL` です。内部 matcher も nginx を経由します。アプリとベンチマーカーのソースは変更していません。
+Rust のローカル構成は `localhost:8080 → nginx → webapp:8080 → MySQL` です。内部 matcher も nginx を経由します。ベンチマーカーのソースを変更せずに計測します。
 
 ## 実行
 
@@ -15,6 +15,7 @@ task profile:bench
 - alp v1.0.22 / slp v0.2.3 の公式配布バイナリを SHA-256 検証後、`_tmp/profile-tools/bin/` に配置します。macOS / Linux の arm64 / amd64 に対応します。
 - nginx は JSON アクセスログを標準出力へ記録します。alp はリクエスト全体の `request_time` を秒単位で集計します（元ログの分解能はミリ秒）。URL のクエリ文字列は除き、ride ID を含む 2 ルートをまとめます。
 - MySQL は一時的に `long_query_time=0`、`min_examined_row_limit=0`、`log_slow_extra=ON` として SQL を記録します。SQLx の既存接続にも設定を反映するため、計測前に Rust コンテナを再起動します。
+- nginx 再読み込み・アプリの疎通確認後、matcher も再起動して古い接続先への待機を解消します。配車呼び出しの 0.5 秒間隔は変更しません。
 - ベンチマークの成否にかかわらず、終了時に MySQL の元の設定を復元し、Rust を再起動して接続の設定も戻します。DB コンテナは再起動しません。
 
 通常の起動はこれまでどおり `task rust:run` です。全クエリ記録は `profile:bench` の実行中だけ有効です。

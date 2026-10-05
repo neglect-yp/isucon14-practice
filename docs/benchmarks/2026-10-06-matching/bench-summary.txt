@@ -1,0 +1,3 @@
+time=01:05:17.894 level=DEBUG source=/Users/keitaminamoto/isucon14-practice/bench/benchmarker/scenario/scenario.go:317 msg=eval reqs=814 score="[64 146 462 117 25]" criteria="[663 557 184 117]"
+time=01:05:23.494 level=INFO msg=18.4%のライドは椅子がマッチされるまでの時間、30.7%のライドはマッチされた椅子が乗車地点までに掛かる時間、82.0%のライドは椅子の実移動時間に不満がありました
+time=01:05:23.494 level=INFO msg=結果 pass=true スコア=57004 種別エラー数=map[]

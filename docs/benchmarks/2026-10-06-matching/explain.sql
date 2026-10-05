@@ -1,0 +1,18 @@
+SHOW INDEX FROM chairs;
+SHOW INDEX FROM rides;
+SHOW INDEX FROM coupons;
+SET @profile_user=(SELECT user_id FROM rides LIMIT 1);
+SET @profile_chair=(SELECT chair_id FROM rides WHERE chair_id IS NOT NULL LIMIT 1);
+SET @profile_token=(SELECT access_token FROM chairs WHERE id=@profile_chair);
+SET @profile_ride=(SELECT used_by FROM coupons WHERE used_by IS NOT NULL LIMIT 1);
+SET @profile_coupon_user=(SELECT user_id FROM coupons WHERE used_by IS NULL LIMIT 1);
+SET @profile_code=(SELECT code FROM coupons WHERE code LIKE 'INV_%' LIMIT 1);
+EXPLAIN SELECT * FROM rides WHERE user_id=@profile_user ORDER BY created_at DESC LIMIT 1;
+EXPLAIN SELECT * FROM rides WHERE chair_id=@profile_chair ORDER BY updated_at DESC LIMIT 1;
+EXPLAIN SELECT * FROM chairs WHERE access_token=@profile_token;
+EXPLAIN SELECT * FROM coupons WHERE used_by=@profile_ride;
+EXPLAIN SELECT COUNT(*) FROM coupons WHERE code=@profile_code;
+EXPLAIN SELECT * FROM coupons WHERE user_id=@profile_coupon_user AND used_by IS NULL ORDER BY created_at LIMIT 1 FOR UPDATE;
+EXPLAIN SELECT id FROM chairs WHERE is_active=TRUE ORDER BY id FOR UPDATE SKIP LOCKED;
+EXPLAIN SELECT id, pickup_latitude, pickup_longitude FROM rides WHERE chair_id IS NULL ORDER BY created_at, id LIMIT 64 FOR UPDATE SKIP LOCKED;
+EXPLAIN SELECT id FROM chair_locations WHERE chair_id=@profile_chair ORDER BY created_at DESC, id DESC LIMIT 1;

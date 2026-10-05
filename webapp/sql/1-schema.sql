@@ -32,7 +32,9 @@ CREATE TABLE chairs
   access_token VARCHAR(255) NOT NULL COMMENT 'アクセストークン',
   created_at   DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '登録日時',
   updated_at   DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '更新日時',
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  INDEX idx_chairs_access_token (access_token),
+  INDEX idx_chairs_is_active (is_active)
 )
   COMMENT = '椅子情報テーブル';
 
@@ -91,7 +93,10 @@ CREATE TABLE rides
   evaluation            INTEGER     NULL     COMMENT '評価',
   created_at            DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '要求日時',
   updated_at            DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '状態更新日時',
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  INDEX idx_rides_user_id_created_at (user_id, created_at),
+  INDEX idx_rides_chair_id_updated_at (chair_id, updated_at),
+  INDEX idx_rides_chair_id_created_at (chair_id, created_at)
 )
   COMMENT = 'ライド情報テーブル';
 
@@ -133,6 +138,9 @@ CREATE TABLE coupons
   discount   INTEGER      NOT NULL COMMENT '割引額',
   created_at DATETIME(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '付与日時',
   used_by    VARCHAR(26)  NULL COMMENT 'クーポンが適用されたライドのID',
-  PRIMARY KEY (user_id, code)
+  PRIMARY KEY (user_id, code),
+  INDEX idx_coupons_used_by (used_by),
+  INDEX idx_coupons_code (code),
+  INDEX idx_coupons_user_id_used_by_created_at (user_id, used_by, created_at)
 )
   COMMENT 'クーポンテーブル';
