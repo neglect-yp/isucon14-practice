@@ -450,64 +450,29 @@ async fn app_post_ride_evaluation(
     State(AppState {
         pool,
         notifications,
+        payment_client,
         ..
     }): State<AppState>,
     Path((ride_id,)): Path<(String,)>,
     axum::Json(req): axum::Json<AppPostRideEvaluationRequest>,
 ) -> Result<axum::Json<AppPostRideEvaluationResponse>, Error> {
-    if req.evaluation < 1 || req.evaluation > 5 {
+    if !(1..=5).contains(&req.evaluation) {
         return Err(Error::BadRequest("evaluation must be between 1 and 5"));
     }
-
     let mut tx = pool.begin().await?;
-
-    let Some(ride): Option<Ride> = sqlx::query_as("SELECT * FROM rides WHERE id = ?")
+    let ride: Ride = sqlx::query_as("SELECT * FROM rides WHERE id=?")
         .bind(&ride_id)
         .fetch_optional(&mut *tx)
         .await?
-    else {
-        return Err(Error::NotFound("ride not found"));
-    };
-    let status = crate::get_latest_ride_status(&mut *tx, &ride.id).await?;
-
-    if status != "ARRIVED" {
+        .ok_or(Error::NotFound("ride not found"))?;
+    if crate::get_latest_ride_status(&mut *tx, &ride_id).await? != "ARRIVED" {
         return Err(Error::BadRequest("not arrived yet"));
     }
-
-    let result = sqlx::query("UPDATE rides SET evaluation = ? WHERE id = ?")
-        .bind(req.evaluation)
-        .bind(&ride_id)
-        .execute(&mut *tx)
-        .await?;
-    let count = result.rows_affected();
-    if count == 0 {
-        return Err(Error::NotFound("ride not found"));
-    }
-
-    sqlx::query("INSERT INTO ride_statuses (id, ride_id, status) VALUES (?, ?, ?)")
-        .bind(Ulid::new().to_string())
-        .bind(&ride_id)
-        .bind("COMPLETED")
-        .execute(&mut *tx)
-        .await?;
-
-    let Some(ride): Option<Ride> = sqlx::query_as("SELECT * FROM rides WHERE id = ?")
-        .bind(&ride_id)
+    let token: PaymentToken = sqlx::query_as("SELECT * FROM payment_tokens WHERE user_id=?")
+        .bind(&ride.user_id)
         .fetch_optional(&mut *tx)
         .await?
-    else {
-        return Err(Error::NotFound("ride not found"));
-    };
-
-    let Some(payment_token): Option<PaymentToken> =
-        sqlx::query_as("SELECT * FROM payment_tokens WHERE user_id = ?")
-            .bind(&ride.user_id)
-            .fetch_optional(&mut *tx)
-            .await?
-    else {
-        return Err(Error::BadRequest("payment token not registered"));
-    };
-
+        .ok_or(Error::BadRequest("payment token not registered"))?;
     let fare = calculate_discounted_fare(
         &mut tx,
         &ride.user_id,
@@ -518,42 +483,62 @@ async fn app_post_ride_evaluation(
         ride.destination_longitude,
     )
     .await?;
-
     let payment_gateway_url: String =
-        sqlx::query_scalar("SELECT value FROM settings WHERE name = 'payment_gateway_url'")
+        sqlx::query_scalar("SELECT value FROM settings WHERE name='payment_gateway_url'")
             .fetch_one(&mut *tx)
             .await?;
+    tx.commit().await?;
 
-    async fn retrieve_rides_order_by_created_at_asc(
-        tx: &mut sqlx::MySqlConnection,
-        user_id: &str,
-    ) -> Result<Vec<Ride>, Error> {
-        sqlx::query_as("SELECT * FROM rides WHERE user_id = ? ORDER BY created_at ASC")
-            .bind(user_id)
-            .fetch_all(tx)
-            .await
-            .map_err(Error::Sqlx)
-    }
-
+    // The same ride uses the same key after a timeout, retry, or process restart.
+    // Hold neither a DB connection nor a row lock during the external request.
     crate::payment_gateway::request_payment_gateway_post_payment(
+        &payment_client,
         &payment_gateway_url,
-        &payment_token.token,
+        &token.token,
+        &ride_id,
         &crate::payment_gateway::PaymentGatewayPostPaymentRequest { amount: fare },
-        &mut tx,
-        &ride.user_id,
-        retrieve_rides_order_by_created_at_asc,
     )
     .await?;
 
-    tx.commit().await?;
-    notifications.notify(crate::notifications::Audience::User(ride.user_id.clone()));
-    if let Some(id) = &ride.chair_id {
-        notifications.notify(crate::notifications::Audience::Chair(id.clone()));
+    let mut tx = pool.begin().await?;
+    let current: Ride = sqlx::query_as("SELECT * FROM rides WHERE id=? FOR UPDATE")
+        .bind(&ride_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    let status = crate::get_latest_ride_status(&mut *tx, &ride_id).await?;
+    if status == "COMPLETED" {
+        tx.commit().await?;
+        return Ok(axum::Json(AppPostRideEvaluationResponse {
+            fare,
+            completed_at: current.updated_at.timestamp_millis(),
+        }));
     }
-
+    if status != "ARRIVED" {
+        return Err(Error::BadRequest("not arrived yet"));
+    }
+    sqlx::query("UPDATE rides SET evaluation=? WHERE id=?")
+        .bind(req.evaluation)
+        .bind(&ride_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("INSERT INTO ride_statuses (id,ride_id,status) VALUES (?,?,'COMPLETED')")
+        .bind(Ulid::new().to_string())
+        .bind(&ride_id)
+        .execute(&mut *tx)
+        .await?;
+    let updated_at: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT updated_at FROM rides WHERE id=?")
+            .bind(&ride_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    tx.commit().await?;
+    notifications.notify(crate::notifications::Audience::User(ride.user_id));
+    if let Some(chair) = ride.chair_id {
+        notifications.notify(crate::notifications::Audience::Chair(chair));
+    }
     Ok(axum::Json(AppPostRideEvaluationResponse {
         fare,
-        completed_at: ride.updated_at.timestamp_millis(),
+        completed_at: updated_at.timestamp_millis(),
     }))
 }
 
@@ -828,6 +813,118 @@ async fn calculate_discounted_fare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    #[ignore = "requires PAYMENT_TEST_DATABASE_URL pointing to isuride_payment_test"]
+    async fn payment_retry_is_idempotent_and_releases_database_connection() -> anyhow::Result<()> {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc, Mutex,
+        };
+        #[derive(Default)]
+        struct Gateway {
+            calls: AtomicUsize,
+            keys: Mutex<std::collections::HashSet<String>>,
+            started: tokio::sync::Notify,
+            release: tokio::sync::Notify,
+        }
+        async fn pay(
+            State(gateway): State<Arc<Gateway>>,
+            headers: axum::http::HeaderMap,
+        ) -> StatusCode {
+            let key = headers
+                .get("idempotency-key")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned();
+            assert_eq!(key, "payment-ride");
+            gateway.keys.lock().unwrap().insert(key);
+            if gateway.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                gateway.started.notify_one();
+                gateway.release.notified().await;
+                // Simulate a successful debit whose HTTP response failed.
+                StatusCode::INTERNAL_SERVER_ERROR
+            } else {
+                StatusCode::NO_CONTENT
+            }
+        }
+        let gateway = Arc::new(Gateway::default());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let url = format!("http://{}", listener.local_addr()?);
+        let app = axum::Router::new()
+            .route("/payments", axum::routing::post(pay))
+            .with_state(gateway.clone());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let pool = sqlx::mysql::MySqlPoolOptions::new()
+            .max_connections(1)
+            .connect(&std::env::var("PAYMENT_TEST_DATABASE_URL")?)
+            .await?;
+        let db: String = sqlx::query_scalar("SELECT DATABASE()")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(db, "isuride_payment_test");
+        sqlx::raw_sql("INSERT INTO rides (id,user_id,chair_id,pickup_latitude,pickup_longitude,destination_latitude,destination_longitude) VALUES ('payment-ride','payment-user','payment-chair',0,0,1,1);
+            INSERT INTO ride_statuses (id,ride_id,status,created_at) VALUES ('payment-carry','payment-ride','CARRYING','2020-01-01'),('payment-arrive','payment-ride','ARRIVED','2020-01-02');
+            INSERT INTO payment_tokens (user_id,token) VALUES ('payment-user','test-token');")
+            .execute(&pool).await?;
+        sqlx::query("INSERT INTO settings (name,value) VALUES ('payment_gateway_url',?)")
+            .bind(url)
+            .execute(&pool)
+            .await?;
+        let state = AppState::new(pool.clone());
+        let first_state = state.clone();
+        let request = tokio::spawn(async move {
+            app_post_ride_evaluation(
+                State(first_state),
+                Path(("payment-ride".into(),)),
+                axum::Json(AppPostRideEvaluationRequest { evaluation: 5 }),
+            )
+            .await
+        });
+        tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            gateway.started.notified(),
+        )
+        .await?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            sqlx::query("SELECT 1").execute(&pool),
+        )
+        .await??;
+        assert_eq!(
+            crate::get_latest_ride_status(&pool, "payment-ride").await?,
+            "ARRIVED"
+        );
+        let concurrent = app_post_ride_evaluation(
+            State(state),
+            Path(("payment-ride".into(),)),
+            axum::Json(AppPostRideEvaluationRequest { evaluation: 5 }),
+        )
+        .await?
+        .0;
+        gateway.release.notify_one();
+        let response = tokio::time::timeout(std::time::Duration::from_secs(3), request)
+            .await???
+            .0;
+        assert_eq!(response.fare, 700);
+        assert_eq!(gateway.calls.load(Ordering::SeqCst), 3);
+        assert_eq!(response.completed_at, concurrent.completed_at);
+        assert_eq!(gateway.keys.lock().unwrap().len(), 1);
+        assert_eq!(
+            crate::get_latest_ride_status(&pool, "payment-ride").await?,
+            "COMPLETED"
+        );
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM ride_statuses WHERE status='COMPLETED'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(count, 1);
+        server.abort();
+        let _ = server.await;
+        Ok(())
+    }
 
     #[tokio::test]
     #[ignore = "requires TEST_DATABASE_URL pointing to isuride_matching_test"]

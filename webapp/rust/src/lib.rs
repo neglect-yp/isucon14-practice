@@ -3,6 +3,7 @@ use axum::{http::StatusCode, response::Response};
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub pool: sqlx::MySqlPool,
+    pub payment_client: reqwest::Client,
     pub notifications: notifications::NotificationHub,
     pub coordinates: coordinates::CoordinateWriter,
     pub receipts: receipts::ReceiptWriter,
@@ -15,6 +16,7 @@ impl AppState {
         let receipts = receipts::ReceiptWriter::new(pool.clone(), coordinates.clone());
         Self {
             pool,
+            payment_client: reqwest::Client::new(),
             notifications,
             coordinates,
             receipts,
