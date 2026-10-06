@@ -38,5 +38,38 @@ class LogWindowTest(unittest.TestCase):
             self.assertEqual(len(list(slow_records(io.StringIO(source.read_text())))), 3)
 
 
+class SlowLogWindowTest(unittest.TestCase):
+    def filtered(self, records):
+        with tempfile.TemporaryDirectory() as directory:
+            source, dest = Path(directory) / "source", Path(directory) / "dest"
+            source.write_text(records)
+            count = filter_slow(source, dest, 10.0, 20.0)
+            return count, dest.read_text()
+
+    def test_excludes_standard_records_provably_outside_window(self):
+        count, text = self.filtered(
+            "# Time: 1970-01-01T00:00:01Z\n# Query_time: 1.0\nSELECT 1;\n"
+            "# Time: 1970-01-01T00:00:12Z\n# Query_time: 1.0 End: 1970-01-01T00:00:13Z\nSELECT 2;\n"
+            "# Time: 1970-01-01T00:00:21Z\n# Query_time: 1.0\nSELECT 3;\n"
+        )
+        self.assertEqual(count, 1)
+        self.assertIn("SELECT 2", text)
+        self.assertNotIn("SELECT 1", text)
+        self.assertNotIn("SELECT 3", text)
+
+    def test_rejects_missing_end_inside_or_overlapping_window(self):
+        for start, duration in [(12, 1), (9, 2), (9, 1)]:
+            with self.subTest(start=start, duration=duration), self.assertRaises(RuntimeError):
+                self.filtered(f"# Time: 1970-01-01T00:00:{start:02}Z\n# Query_time: {duration}.0\nSELECT 1;\n")
+
+    def test_uses_end_timestamp_and_half_open_boundaries(self):
+        count, text = self.filtered(
+            "# Time: 1970-01-01T00:00:01Z\n# Query_time: 9.0 End: 1970-01-01T00:00:10Z\nSELECT 1;\n"
+            "# Time: 1970-01-01T00:00:11Z\n# Query_time: 9.0 End: 1970-01-01T00:00:20Z\nSELECT 2;\n"
+        )
+        self.assertEqual(count, 1)
+        self.assertIn("SELECT 1", text)
+
+
 if __name__ == "__main__":
     unittest.main()

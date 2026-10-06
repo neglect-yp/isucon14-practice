@@ -122,6 +122,15 @@ def filter_slow(source, dest, start, end):
             # End is microsecond precision and is emitted by log_slow_extra.
             match = re.search(r'\bEnd: (\S+)', record)
             if not match:
+                # Sessions already executing when profiling starts may emit a
+                # standard record without extra fields. Ignore it only when
+                # even its conservative completion bound is outside the window.
+                stamp = re.search(r'^# Time: (\S+)', record)
+                duration = re.search(r'\bQuery_time: ([0-9.]+)', record)
+                if stamp and duration:
+                    timestamp = datetime.fromisoformat(stamp[1].replace("Z", "+00:00")).timestamp()
+                    if timestamp + float(duration[1]) < start or timestamp >= end:
+                        continue
                 raise RuntimeError("Slow log is missing End timestamps; enable log_slow_extra")
             completed = datetime.fromisoformat(match[1].replace("Z", "+00:00")).timestamp()
             if start <= completed < end:
