@@ -118,8 +118,11 @@ impl CoordinateWriter {
             .map_err(Error::Background)
     }
 
-    // Called while holding the initialization write guard; stale queued work
-    // must not be persisted after the database has been replaced.
+    pub fn generation(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
+    }
+
+    // Called while holding the initialization write guard; reject stale queued work.
     pub fn reset(&self) {
         self.generation.fetch_add(1, Ordering::SeqCst);
     }

@@ -199,17 +199,6 @@ async fn prepare(
     Ok(Some(event))
 }
 
-async fn acknowledge(pool: &MySqlPool, audience: &Audience, status_id: &str) -> sqlx::Result<()> {
-    let column = audience.sent_column();
-    sqlx::query(&format!(
-        "UPDATE ride_statuses SET {column}=CURRENT_TIMESTAMP(6) WHERE id=? AND {column} IS NULL"
-    ))
-    .bind(status_id)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
 struct Connection {
     state: AppState,
     audience: Audience,
@@ -229,7 +218,7 @@ impl Connection {
             // Record progress only AFTER the previous event was yielded to the
             // response body. Dropping a stream before then leaves it replayable.
             if let Some(id) = self.pending_ack.take() {
-                acknowledge(&self.state.pool, &self.audience, &id).await?;
+                self.state.receipts.acknowledge(&self.audience, id).await?;
             }
             if !self.drain {
                 // DB reconciliation also recovers a lost wakeup or a write from
@@ -465,6 +454,9 @@ mod tests {
         }
         assert_eq!(user.next().await?["ride_id"], "sse-new");
         assert_eq!(chair.next().await?["status"], "MATCHING");
+        let delivered: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ride_statuses WHERE ride_id='sse-old' AND app_sent_at IS NOT NULL AND chair_sent_at IS NOT NULL")
+            .fetch_one(&pool).await?;
+        assert_eq!(delivered, 6);
         // Both SSE connections stay open, but a pool of just two still serves SQL.
         tokio::time::timeout(
             Duration::from_secs(1),

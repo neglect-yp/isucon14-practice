@@ -5,16 +5,19 @@ pub struct AppState {
     pub pool: sqlx::MySqlPool,
     pub notifications: notifications::NotificationHub,
     pub coordinates: coordinates::CoordinateWriter,
+    pub receipts: receipts::ReceiptWriter,
 }
 
 impl AppState {
     pub fn new(pool: sqlx::MySqlPool) -> Self {
         let notifications = notifications::NotificationHub::default();
         let coordinates = coordinates::CoordinateWriter::new(pool.clone(), notifications.clone());
+        let receipts = receipts::ReceiptWriter::new(pool.clone(), coordinates.clone());
         Self {
             pool,
             notifications,
             coordinates,
+            receipts,
         }
     }
 }
@@ -128,3 +131,5 @@ pub mod models;
 pub mod notifications;
 pub mod owner_handlers;
 pub mod payment_gateway;
+
+pub mod receipts;
