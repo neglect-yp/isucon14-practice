@@ -176,12 +176,25 @@ struct PreparedEvent {
     needs_ack: bool,
 }
 
+async fn begin_preparation(
+    pool: &MySqlPool,
+) -> sqlx::Result<sqlx::Transaction<'static, sqlx::MySql>> {
+    let conn = pool.acquire().await?;
+    // SQLx 0.8.2 records transaction depth after awaiting BEGIN's reply. If an
+    // SSE body is dropped during that await, no Transaction guard exists yet.
+    // Finish BEGIN in a task so a dropped caller still drops a fully constructed
+    // guard and queues ROLLBACK before the connection can be reused.
+    tokio::spawn(async move { sqlx::Transaction::begin(conn).await })
+        .await
+        .map_err(|error| sqlx::Error::Protocol(format!("notification transaction task: {error}")))?
+}
+
 async fn prepare(
     pool: &MySqlPool,
     audience: &Audience,
     cursor: Option<&Cursor>,
 ) -> Result<Option<PreparedEvent>, Error> {
-    let mut tx = pool.begin().await?;
+    let mut tx = begin_preparation(pool).await?;
     let Some(row) = next_row(&mut tx, audience, cursor).await? else {
         tx.commit().await?;
         return Ok(None);
@@ -308,6 +321,119 @@ pub async fn respond(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    #[ignore = "requires CANCELLATION_TEST_DATABASE_URL pointing to isuride_cancellation_test"]
+    async fn cancellation_during_begin_does_not_leak_a_transaction() -> anyhow::Result<()> {
+        use sqlx::mysql::{MySqlConnectOptions, MySqlPoolOptions, MySqlSslMode};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+        #[derive(Default)]
+        struct Gate {
+            armed: AtomicBool,
+            pending: AtomicBool,
+            begun: tokio::sync::Notify,
+            release: tokio::sync::Notify,
+        }
+        async fn packet(reader: &mut (impl AsyncRead + Unpin)) -> std::io::Result<Vec<u8>> {
+            let mut header = [0u8; 4];
+            reader.read_exact(&mut header).await?;
+            let len =
+                header[0] as usize | ((header[1] as usize) << 8) | ((header[2] as usize) << 16);
+            let mut data = vec![0; 4 + len];
+            data[..4].copy_from_slice(&header);
+            reader.read_exact(&mut data[4..]).await?;
+            Ok(data)
+        }
+        let options: MySqlConnectOptions =
+            std::env::var("CANCELLATION_TEST_DATABASE_URL")?.parse()?;
+        let direct = MySqlPool::connect_with(options.clone()).await?;
+        let db: String = sqlx::query_scalar("SELECT DATABASE()")
+            .fetch_one(&direct)
+            .await?;
+        assert_eq!(db, "isuride_cancellation_test");
+        let address = (options.get_host().to_owned(), options.get_port());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let port = listener.local_addr()?.port();
+        let gate = Arc::new(Gate::default());
+        let server_gate = gate.clone();
+        let proxy = tokio::spawn(async move {
+            while let Ok((client, _)) = listener.accept().await {
+                let backend = tokio::net::TcpStream::connect(address.clone())
+                    .await
+                    .unwrap();
+                let gate = server_gate.clone();
+                tokio::spawn(async move {
+                    let (mut client_read, mut client_write) = client.into_split();
+                    let (mut backend_read, mut backend_write) = backend.into_split();
+                    let client_gate = gate.clone();
+                    let requests = async move {
+                        loop {
+                            let data = packet(&mut client_read).await?;
+                            if data.get(4) == Some(&3)
+                                && data.get(5..) == Some(b"BEGIN")
+                                && client_gate.armed.swap(false, Ordering::SeqCst)
+                            {
+                                client_gate.pending.store(true, Ordering::SeqCst);
+                            }
+                            backend_write.write_all(&data).await?;
+                        }
+                        #[allow(unreachable_code)]
+                        Ok::<(), std::io::Error>(())
+                    };
+                    let responses = async move {
+                        loop {
+                            let data = packet(&mut backend_read).await?;
+                            if data.get(4) == Some(&0) && gate.pending.swap(false, Ordering::SeqCst)
+                            {
+                                // MySQL has executed BEGIN, but SQLx has not received its OK.
+                                gate.begun.notify_one();
+                                gate.release.notified().await;
+                            }
+                            client_write.write_all(&data).await?;
+                        }
+                        #[allow(unreachable_code)]
+                        Ok::<(), std::io::Error>(())
+                    };
+                    tokio::select! { _=requests=>{}, _=responses=>{} }
+                });
+            }
+        });
+        let pool = MySqlPoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                options
+                    .host("127.0.0.1")
+                    .port(port)
+                    .ssl_mode(MySqlSslMode::Disabled),
+            )
+            .await?;
+        gate.armed.store(true, Ordering::SeqCst);
+        let task_pool = pool.clone();
+        let request = tokio::spawn(async move { begin_preparation(&task_pool).await });
+        tokio::time::timeout(Duration::from_secs(2), gate.begun.notified()).await?;
+        request.abort();
+        assert!(request.await.unwrap_err().is_cancelled());
+        gate.release.notify_one();
+        // Reuse that single connection for an autocommit write, as chair registration does.
+        tokio::time::timeout(Duration::from_secs(2),sqlx::query("INSERT INTO chairs (id,owner_id,name,model,is_active,access_token) VALUES ('cancel-probe','owner','probe','model',FALSE,'cancel-probe-token')").execute(&pool)).await??;
+        let visible: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM chairs WHERE id='cancel-probe'")
+                .fetch_one(&direct)
+                .await?;
+        sqlx::query("ROLLBACK").execute(&pool).await?;
+        sqlx::query("DELETE FROM chairs WHERE id='cancel-probe'")
+            .execute(&direct)
+            .await?;
+        pool.close().await;
+        direct.close().await;
+        proxy.abort();
+        let _ = proxy.await;
+        assert_eq!(
+            visible, 1,
+            "a subsequent registration must be committed and visible from another connection"
+        );
+        Ok(())
+    }
 
     #[tokio::test]
     async fn wakeups_are_scoped_and_reset_closes_subscriptions() {

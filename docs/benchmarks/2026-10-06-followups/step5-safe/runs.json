@@ -1,0 +1,42 @@
+[
+  {
+    "image": "isuride-perf:step5",
+    "run": "20261006-221647",
+    "score": 172930,
+    "benchmark_errors": "map[13:2]",
+    "commit": "4586aa51d3e6e6d5f5e54be4ee305d72e037ec85",
+    "image_id": "sha256:ce1e28c5b315ae6401de6d8d8295ea890637841c02d07f150231a90cb4313434",
+    "host_forwarding": "Go x/crypto v0.43 SSH client, same VM SSH server; session RLIMIT_NOFILE=16384",
+    "mysql_settings_restored": true
+  },
+  {
+    "image": "isuride-perf:step5",
+    "run": "20261006-222145",
+    "score": 155097,
+    "benchmark_errors": "map[]",
+    "commit": "4586aa51d3e6e6d5f5e54be4ee305d72e037ec85",
+    "image_id": "sha256:ce1e28c5b315ae6401de6d8d8295ea890637841c02d07f150231a90cb4313434",
+    "host_forwarding": "Go x/crypto v0.43 SSH client, same VM SSH server; session RLIMIT_NOFILE=16384",
+    "mysql_settings_restored": true
+  },
+  {
+    "image": "isuride-perf:step5-safe",
+    "run": "20261006-223644",
+    "score": 155043,
+    "benchmark_errors": "map[]",
+    "commit": "1d0e266692b1750ea99793b1198e7e3977b44564",
+    "image_id": "sha256:d84478b6c4473683ec382ef6da538ac822f386b183388f22975988fdf160a867",
+    "host_forwarding": "Go x/crypto v0.43 SSH client, same VM SSH server; session RLIMIT_NOFILE=16384",
+    "mysql_settings_restored": true
+  },
+  {
+    "image": "isuride-perf:step5-safe",
+    "run": "20261006-223852",
+    "score": 162254,
+    "benchmark_errors": "map[]",
+    "commit": "1d0e266692b1750ea99793b1198e7e3977b44564",
+    "image_id": "sha256:d84478b6c4473683ec382ef6da538ac822f386b183388f22975988fdf160a867",
+    "host_forwarding": "Go x/crypto v0.43 SSH client, same VM SSH server; session RLIMIT_NOFILE=16384",
+    "mysql_settings_restored": true
+  }
+]
