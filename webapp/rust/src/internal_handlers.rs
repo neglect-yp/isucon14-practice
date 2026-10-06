@@ -132,6 +132,7 @@ async fn internal_get_matching(
     State(AppState {
         pool,
         notifications,
+        ..
     }): State<AppState>,
 ) -> Result<StatusCode, Error> {
     for (user_id, chair_id) in assign_pending_rides(&pool).await? {

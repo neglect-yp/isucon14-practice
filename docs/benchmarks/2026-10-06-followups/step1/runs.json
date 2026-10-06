@@ -1,0 +1,34 @@
+[
+  {
+    "image": "isuride-perf:baseline",
+    "run": "20261006-204346",
+    "score": 47741,
+    "commit": "c9a99f1a6e7b32675137e0e15ff95c27bebc56a2",
+    "image_id": null,
+    "mysql_settings_restored": true
+  },
+  {
+    "image": "isuride-perf:step1",
+    "run": "20261006-204803",
+    "score": 86430,
+    "commit": "c9a99f1a6e7b32675137e0e15ff95c27bebc56a2",
+    "image_id": "sha256:59fdb838c2d254b2e686cc0c196126e5dcb2ef8d1c9424a3616d1c6a27fe9ffc",
+    "mysql_settings_restored": true
+  },
+  {
+    "image": "isuride-perf:baseline",
+    "run": "20261006-205138",
+    "score": 74700,
+    "commit": "c9a99f1a6e7b32675137e0e15ff95c27bebc56a2",
+    "image_id": "sha256:619584897c0ed7111a3c60c30c89da132d52bdc2cf87e4d82a779d5f7b03e225",
+    "mysql_settings_restored": true
+  },
+  {
+    "image": "isuride-perf:step1",
+    "run": "20261006-205432",
+    "score": 94077,
+    "commit": "c9a99f1a6e7b32675137e0e15ff95c27bebc56a2",
+    "image_id": "sha256:67c55fef7c51a90a1776f6e1fdf34ced1cd81c60c1af7d9d56fb6e46f416a66e",
+    "mysql_settings_restored": true
+  }
+]

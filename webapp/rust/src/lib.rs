@@ -4,13 +4,17 @@ use axum::{http::StatusCode, response::Response};
 pub struct AppState {
     pub pool: sqlx::MySqlPool,
     pub notifications: notifications::NotificationHub,
+    pub coordinates: coordinates::CoordinateWriter,
 }
 
 impl AppState {
     pub fn new(pool: sqlx::MySqlPool) -> Self {
+        let notifications = notifications::NotificationHub::default();
+        let coordinates = coordinates::CoordinateWriter::new(pool.clone(), notifications.clone());
         Self {
             pool,
-            notifications: Default::default(),
+            notifications,
+            coordinates,
         }
     }
 }
@@ -23,6 +27,8 @@ pub enum Error {
     Sqlx(#[from] sqlx::Error),
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("background write failed: {0}")]
+    Background(String),
     #[error("failed to initialize: stdout={stdout} stderr={stderr}")]
     Initialize { stdout: String, stderr: String },
     #[error("{0}")]
@@ -115,6 +121,7 @@ pub fn calculate_fare(
 
 pub mod app_handlers;
 pub mod chair_handlers;
+pub mod coordinates;
 pub mod internal_handlers;
 pub mod middlewares;
 pub mod models;

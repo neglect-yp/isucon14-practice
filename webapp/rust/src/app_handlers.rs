@@ -276,6 +276,7 @@ async fn app_post_rides(
     State(AppState {
         pool,
         notifications,
+        ..
     }): State<AppState>,
     axum::Extension(user): axum::Extension<User>,
     axum::Json(req): axum::Json<AppPostRidesRequest>,
@@ -449,6 +450,7 @@ async fn app_post_ride_evaluation(
     State(AppState {
         pool,
         notifications,
+        ..
     }): State<AppState>,
     Path((ride_id,)): Path<(String,)>,
     axum::Json(req): axum::Json<AppPostRideEvaluationRequest>,

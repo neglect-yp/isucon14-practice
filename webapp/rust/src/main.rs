@@ -70,10 +70,14 @@ async fn post_initialize(
     State(AppState {
         pool,
         notifications,
+        coordinates,
+        ..
     }): State<AppState>,
     axum::Json(req): axum::Json<PostInitializeRequest>,
 ) -> Result<axum::Json<PostInitializeResponse>, Error> {
     // End old streams before replacing the database's notification history.
+    let _coordinate_guard = coordinates.initialization.write().await;
+    coordinates.reset();
     notifications.reset();
     let output = tokio::process::Command::new("../sql/init.sh")
         .output()

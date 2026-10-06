@@ -1,0 +1,11 @@
+{
+  "load_start": "2026-10-06T11:54:51.940000+00:00",
+  "load_end": "2026-10-06T11:55:49.539000+00:00",
+  "duration_seconds": 57.598999977111816,
+  "http_records": 74133,
+  "slow_log_records": 1257221,
+  "window": "first to last existing tick progress log; completion time >= start and < end; includes internal matcher; excludes load edges",
+  "sql_statements": 1165709,
+  "sql_groups": 1784,
+  "slow_log_records_not_aggregated_by_slp": 91512
+}
