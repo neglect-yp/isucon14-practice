@@ -45,7 +45,13 @@ func main() {
 		log.Fatalf("session limit: %v %s", err, result)
 	}
 	log.Printf("forwarding session: %s", result)
-	for _, route := range [][4]string{{"tcp4", "127.0.0.1:8080", "tcp", "127.0.0.1:8080"}, {"tcp6", "[::1]:8080", "tcp", "127.0.0.1:8080"}, {"unix", os.Args[5], "unix", "/var/run/docker.sock"}} {
+	routes := [][4]string{{"unix", os.Args[5], "unix", "/var/run/docker.sock"}}
+	for _, port := range []string{"8080", "3306", "12345"} {
+		routes = append(routes,
+			[4]string{"tcp4", "127.0.0.1:" + port, "tcp", "127.0.0.1:" + port},
+			[4]string{"tcp6", "[::1]:" + port, "tcp", "127.0.0.1:" + port})
+	}
+	for _, route := range routes {
 		listener, err := net.Listen(route[0], route[1])
 		if err != nil {
 			log.Fatal(err)
