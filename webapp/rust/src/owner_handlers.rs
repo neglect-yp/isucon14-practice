@@ -247,29 +247,8 @@ async fn owner_get_chairs(
     State(AppState { pool, .. }): State<AppState>,
     axum::Extension(owner): axum::Extension<Owner>,
 ) -> Result<axum::Json<OwnerGetChairResponse>, Error> {
-    let chairs: Vec<ChairWithDetail> = sqlx::query_as(r#"SELECT id,
-       owner_id,
-       name,
-       access_token,
-       model,
-       is_active,
-       created_at,
-       updated_at,
-       IFNULL(total_distance, 0) AS total_distance,
-       total_distance_updated_at
-FROM chairs
-       LEFT JOIN (SELECT chair_id,
-                          SUM(IFNULL(distance, 0)) AS total_distance,
-                          MAX(created_at)          AS total_distance_updated_at
-                   FROM (SELECT chair_id,
-                                created_at,
-                                ABS(latitude - LAG(latitude) OVER (PARTITION BY chair_id ORDER BY created_at)) +
-                                ABS(longitude - LAG(longitude) OVER (PARTITION BY chair_id ORDER BY created_at)) AS distance
-                         FROM chair_locations
-                         WHERE chair_id IN (SELECT id FROM chairs WHERE owner_id = ?)) tmp
-                   GROUP BY chair_id) distance_table ON distance_table.chair_id = chairs.id
-WHERE owner_id = ?
-    "#).bind(&owner.id).bind(&owner.id).fetch_all(&pool).await?;
+    let chairs: Vec<ChairWithDetail> = sqlx::query_as("SELECT c.*, COALESCE(d.total_distance,0) AS total_distance,d.updated_at AS total_distance_updated_at FROM chairs c LEFT JOIN chair_distances d ON d.chair_id=c.id WHERE c.owner_id=?")
+        .bind(&owner.id).fetch_all(&pool).await?;
 
     Ok(axum::Json(OwnerGetChairResponse {
         chairs: chairs

@@ -156,6 +156,21 @@ async fn persist(pool: &MySqlPool, batch: &[Update]) -> sqlx::Result<(i64, Vec<(
             .push_bind(recorded_at);
     });
     locations.build().execute(&mut *tx).await?;
+    // Each batch has distinct chairs. Keep the aggregate and history in one transaction.
+    let mut distances = QueryBuilder::<MySql>::new(
+        "INSERT INTO chair_distances (chair_id,latitude,longitude,total_distance,updated_at) ",
+    );
+    distances.push_values(batch, |mut row, item| {
+        row.push_bind(&item.chair_id)
+            .push_bind(item.coordinate.latitude)
+            .push_bind(item.coordinate.longitude)
+            .push("0")
+            .push_bind(recorded_at);
+    });
+    // Assignment order matters: compute the delta using the previous position first.
+    distances.push(" ON DUPLICATE KEY UPDATE total_distance=total_distance+ABS(latitude-VALUES(latitude))+ABS(longitude-VALUES(longitude)),latitude=VALUES(latitude),longitude=VALUES(longitude),updated_at=VALUES(updated_at)");
+    distances.build().execute(&mut *tx).await?;
+
     let mut query = QueryBuilder::<MySql>::new(
         "SELECT r.id,r.user_id,r.chair_id,r.pickup_latitude,r.pickup_longitude,
          r.destination_latitude,r.destination_longitude,
@@ -229,7 +244,34 @@ mod tests {
           INSERT INTO rides (id,user_id,chair_id,pickup_latitude,pickup_longitude,destination_latitude,destination_longitude) VALUES ('coordinate-ride','user','coordinate-chair',1,2,3,4);
           INSERT INTO ride_statuses (id,ride_id,status,created_at) VALUES ('coordinate-start','coordinate-ride','ENROUTE','2020-01-01');")
             .execute(&pool).await?;
+        sqlx::query("INSERT INTO chair_locations (id,chair_id,latitude,longitude,created_at) VALUES ('coordinate-history','coordinate-chair',-1,1,'2020-01-01')").execute(&pool).await?;
+        let rebuild = std::fs::read_to_string("/home/isucon/webapp/sql/4-derived-data.sql")?;
+        sqlx::raw_sql(&rebuild).execute(&pool).await?;
+        sqlx::raw_sql(&rebuild).execute(&pool).await?; // Rebuilding twice must not double-count.
         let writer = CoordinateWriter::new(pool.clone(), Default::default());
+        sqlx::raw_sql("CREATE TRIGGER fail_coordinate_status BEFORE INSERT ON ride_statuses FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='injected failure'").execute(&pool).await?;
+        let failed = writer
+            .record(
+                "coordinate-chair".into(),
+                Coordinate {
+                    latitude: 1,
+                    longitude: 2,
+                },
+            )
+            .await;
+        sqlx::raw_sql("DROP TRIGGER fail_coordinate_status")
+            .execute(&pool)
+            .await?;
+        assert!(failed.is_err());
+        let unchanged:(i64,i32,i32)=sqlx::query_as("SELECT total_distance,latitude,longitude FROM chair_distances WHERE chair_id='coordinate-chair'").fetch_one(&pool).await?;
+        assert_eq!(unchanged, (0, -1, 1));
+        let history: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chair_locations")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(
+            history, 1,
+            "history and total must roll back if the status write fails"
+        );
         let first = writer
             .record(
                 "coordinate-chair".into(),
@@ -240,7 +282,7 @@ mod tests {
             )
             .await?;
         let saved: DateTime<Utc> = sqlx::query_scalar(
-            "SELECT created_at FROM chair_locations WHERE chair_id='coordinate-chair'",
+            "SELECT created_at FROM chair_locations WHERE chair_id='coordinate-chair' ORDER BY created_at DESC LIMIT 1",
         )
         .fetch_one(&pool)
         .await?;
@@ -277,6 +319,12 @@ mod tests {
             crate::get_latest_ride_status(&pool, "coordinate-ride").await?,
             "ARRIVED"
         );
+        let distance:(i64,i32,i32)=sqlx::query_as("SELECT total_distance,latitude,longitude FROM chair_distances WHERE chair_id='coordinate-chair'").fetch_one(&pool).await?;
+        assert_eq!(distance, (7, 3, 4)); // (-1,1) -> (1,2) -> (1,2) -> (3,4)
+        let before_rebuild = distance;
+        sqlx::raw_sql(&rebuild).execute(&pool).await?;
+        let rebuilt:(i64,i32,i32)=sqlx::query_as("SELECT total_distance,latitude,longitude FROM chair_distances WHERE chair_id='coordinate-chair'").fetch_one(&pool).await?;
+        assert_eq!(before_rebuild, rebuilt);
         let mut tasks = Vec::new();
         for i in 0..32 {
             let writer = writer.clone();
@@ -298,7 +346,7 @@ mod tests {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chair_locations")
             .fetch_one(&pool)
             .await?;
-        assert_eq!(count, 35);
+        assert_eq!(count, 36);
         assert!(writer
             .record(
                 "x".repeat(27),
@@ -312,7 +360,7 @@ mod tests {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chair_locations")
             .fetch_one(&pool)
             .await?;
-        assert_eq!(count, 35);
+        assert_eq!(count, 36);
         let guard = writer.initialization.write().await;
         let (reply, response) = oneshot::channel();
         writer
@@ -334,7 +382,7 @@ mod tests {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chair_locations")
             .fetch_one(&pool)
             .await?;
-        assert_eq!(count, 35);
+        assert_eq!(count, 36);
         Ok(())
     }
 }

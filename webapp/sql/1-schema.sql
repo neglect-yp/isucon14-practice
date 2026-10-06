@@ -144,3 +144,12 @@ CREATE TABLE coupons
   INDEX idx_coupons_user_id_used_by_created_at (user_id, used_by, created_at)
 )
   COMMENT 'クーポンテーブル';
+
+DROP TABLE IF EXISTS chair_distances;
+CREATE TABLE chair_distances (
+  chair_id VARCHAR(26) NOT NULL PRIMARY KEY,
+  latitude INTEGER NOT NULL,
+  longitude INTEGER NOT NULL,
+  total_distance BIGINT NOT NULL,
+  updated_at DATETIME(6) NOT NULL
+);
