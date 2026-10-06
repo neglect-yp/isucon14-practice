@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum_extra::extract::CookieJar;
 use ulid::Ulid;
 
-use crate::models::{Chair, ChairLocation, Coupon, Owner, PaymentToken, Ride, User};
+use crate::models::{Chair, Coupon, Owner, PaymentToken, Ride, User};
 use crate::{AppState, Coordinate, Error};
 
 pub fn app_routes(app_state: AppState) -> axum::Router<AppState> {
@@ -676,83 +676,76 @@ struct AppGetNearbyChairsResponseChair {
     current_coordinate: Coordinate,
 }
 
+async fn nearby_chairs(
+    conn: &mut sqlx::MySqlConnection,
+    query: &AppGetNearbyChairsQuery,
+) -> sqlx::Result<Vec<AppGetNearbyChairsResponseChair>> {
+    #[derive(sqlx::FromRow)]
+    struct Nearby {
+        id: String,
+        name: String,
+        model: String,
+        latitude: i32,
+        longitude: i32,
+    }
+    // The grouping can use an index skip scan, avoiding a sort of each chair's history.
+    let rows: Vec<Nearby> = sqlx::query_as(
+        "SELECT c.id,c.name,c.model,l.latitude,l.longitude FROM chairs c
+         JOIN (SELECT chair_id,MAX(created_at) AS latest_at FROM chair_locations GROUP BY chair_id) latest ON latest.chair_id=c.id
+         JOIN chair_locations l ON l.chair_id=c.id AND l.created_at=latest.latest_at
+         WHERE c.is_active=TRUE AND ABS(l.latitude-?)+ABS(l.longitude-?) <= ?
+           AND l.id=(SELECT MAX(id) FROM chair_locations WHERE chair_id=c.id AND created_at=latest.latest_at)")
+        .bind(query.latitude).bind(query.longitude).bind(query.distance.unwrap_or(50))
+        .fetch_all(&mut *conn).await?;
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+    // Keep this as a second batched query: the optimizer otherwise checks every
+    // active chair's ride history before applying the distance filter.
+    let mut busy = sqlx::QueryBuilder::<sqlx::MySql>::new(
+        "SELECT DISTINCT r.chair_id FROM rides r WHERE r.chair_id IN (",
+    );
+    {
+        let mut ids = busy.separated(",");
+        for chair in &rows {
+            ids.push_bind(&chair.id);
+        }
+    }
+    busy.push(") AND COALESCE((SELECT status FROM ride_statuses s WHERE s.ride_id=r.id ORDER BY s.created_at DESC,s.id DESC LIMIT 1),'') != 'COMPLETED'");
+    let busy: std::collections::HashSet<String> = busy
+        .build_query_scalar()
+        .fetch_all(conn)
+        .await?
+        .into_iter()
+        .collect();
+    Ok(rows
+        .into_iter()
+        .filter(|r| !busy.contains(&r.id))
+        .map(|r| AppGetNearbyChairsResponseChair {
+            id: r.id,
+            name: r.name,
+            model: r.model,
+            current_coordinate: Coordinate {
+                latitude: r.latitude,
+                longitude: r.longitude,
+            },
+        })
+        .collect())
+}
+
 async fn app_get_nearby_chairs(
     State(AppState { pool, .. }): State<AppState>,
     Query(query): Query<AppGetNearbyChairsQuery>,
 ) -> Result<axum::Json<AppGetNearbyChairsResponse>, Error> {
-    let distance = query.distance.unwrap_or(50);
-    let coordinate = Coordinate {
-        latitude: query.latitude,
-        longitude: query.longitude,
-    };
-
     let mut tx = pool.begin().await?;
-
-    let chairs: Vec<Chair> = sqlx::query_as("SELECT * FROM chairs")
-        .fetch_all(&mut *tx)
-        .await?;
-
-    let mut nearby_chairs = Vec::new();
-    for chair in chairs {
-        if !chair.is_active {
-            continue;
-        }
-
-        let rides: Vec<Ride> =
-            sqlx::query_as("SELECT * FROM rides WHERE chair_id = ? ORDER BY created_at DESC")
-                .bind(&chair.id)
-                .fetch_all(&mut *tx)
-                .await?;
-
-        let mut skip = false;
-        for ride in rides {
-            // 過去にライドが存在し、かつ、それが完了していない場合はスキップ
-            let status = crate::get_latest_ride_status(&mut *tx, &ride.id).await?;
-            if status != "COMPLETED" {
-                skip = true;
-                break;
-            }
-        }
-        if skip {
-            continue;
-        }
-
-        // 最新の位置情報を取得
-        let Some(chair_location): Option<ChairLocation> = sqlx::query_as(
-            "SELECT * FROM chair_locations WHERE chair_id = ? ORDER BY created_at DESC LIMIT 1",
-        )
-        .bind(&chair.id)
-        .fetch_optional(&mut *tx)
-        .await?
-        else {
-            continue;
-        };
-        if crate::calculate_distance(
-            coordinate.latitude,
-            coordinate.longitude,
-            chair_location.latitude,
-            chair_location.longitude,
-        ) <= distance
-        {
-            nearby_chairs.push(AppGetNearbyChairsResponseChair {
-                id: chair.id,
-                name: chair.name,
-                model: chair.model,
-                current_coordinate: Coordinate {
-                    latitude: chair_location.latitude,
-                    longitude: chair_location.longitude,
-                },
-            });
-        }
-    }
-
+    let chairs = nearby_chairs(&mut tx, &query).await?;
     let retrieved_at: chrono::DateTime<chrono::Utc> =
         sqlx::query_scalar("SELECT CURRENT_TIMESTAMP(6)")
             .fetch_one(&mut *tx)
             .await?;
-
+    tx.commit().await?;
     Ok(axum::Json(AppGetNearbyChairsResponse {
-        chairs: nearby_chairs,
+        chairs,
         retrieved_at: retrieved_at.timestamp(),
     }))
 }
@@ -813,6 +806,54 @@ async fn calculate_discounted_fare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    #[ignore = "requires TEST_DATABASE_URL pointing to isuride_matching_test"]
+    async fn nearby_preserves_history_activity_and_latest_position() -> anyhow::Result<()> {
+        let pool = sqlx::MySqlPool::connect(&std::env::var("TEST_DATABASE_URL")?).await?;
+        let mut tx = pool.begin().await?;
+        let db: String = sqlx::query_scalar("SELECT DATABASE()")
+            .fetch_one(&mut *tx)
+            .await?;
+        assert_eq!(db, "isuride_matching_test");
+        for (id, active, x, y) in [
+            ("near-free", true, 10000, 10000),
+            ("near-busy", true, 10000, 10000),
+            ("near-off", false, 10000, 10000),
+            ("near-edge", true, 10030, 10020),
+            ("near-far", true, 10051, 10000),
+        ] {
+            sqlx::query("INSERT INTO chairs (id,owner_id,name,model,is_active,access_token) VALUES (?,'near-owner',?,'test',?,?)").bind(id).bind(id).bind(active).bind(id).execute(&mut *tx).await?;
+            sqlx::query("INSERT INTO chair_locations (id,chair_id,latitude,longitude,created_at) VALUES (?,?,?,?,'2020-01-02')").bind(id).bind(id).bind(x).bind(y).execute(&mut *tx).await?;
+        }
+        sqlx::raw_sql("INSERT INTO chair_locations (id,chair_id,latitude,longitude,created_at) VALUES ('near-old','near-free',99999,99999,'2020-01-01');
+          INSERT INTO rides (id,user_id,chair_id,pickup_latitude,pickup_longitude,destination_latitude,destination_longitude,created_at) VALUES
+          ('near-old-busy','near-user','near-busy',0,0,0,0,'2020-01-01'),('near-new-done','near-user','near-busy',0,0,0,0,'2020-01-02'),('near-free-done','near-user','near-free',0,0,0,0,'2020-01-01');
+          INSERT INTO ride_statuses (id,ride_id,status,created_at) VALUES ('near-status-old','near-old-busy','CARRYING','2020-01-01'),('near-status-new','near-new-done','COMPLETED','2020-01-02'),('near-status-free','near-free-done','COMPLETED','2020-01-01');")
+          .execute(&mut *tx).await?;
+        let rows = nearby_chairs(
+            &mut tx,
+            &AppGetNearbyChairsQuery {
+                latitude: 10000,
+                longitude: 10000,
+                distance: None,
+            },
+        )
+        .await?;
+        let mut ids: Vec<_> = rows.iter().map(|r| r.id.as_str()).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec!["near-edge", "near-free"]);
+        assert_eq!(
+            rows.iter()
+                .find(|r| r.id == "near-free")
+                .unwrap()
+                .current_coordinate
+                .latitude,
+            10000
+        );
+        tx.rollback().await?;
+        Ok(())
+    }
+
     #[tokio::test]
     #[ignore = "requires PAYMENT_TEST_DATABASE_URL pointing to isuride_payment_test"]
     async fn payment_retry_is_idempotent_and_releases_database_connection() -> anyhow::Result<()> {
